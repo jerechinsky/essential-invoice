@@ -55,7 +55,17 @@
     "vatRate": "Výchozí sazba DPH (%)",
     "paymentTerms": "Výchozí splatnost (dny)",
     "invoiceNumberPrefix": "Prefix čísla faktury",
-    "invoiceNumberPrefixPlaceholder": "Např. FV, INV"
+    "invoiceNumberPrefixPlaceholder": "Např. FV, INV",
+    "invoiceNumberFormat": "Formát čísla faktury",
+    "invoiceNumberFormatHelp": "Dostupné tokeny: YYYY (rok), YY (2 číslice), MM (měsíc), SEQ / SEQ2 / SEQ3 / SEQ4 (pořadové číslo s doplněním nul). Každý token v šabloně obalte složenými závorkami; jejich pořadí je libovolné.",
+    "invoiceNumberStartingSequence": "Počáteční pořadové číslo",
+    "invoiceNumberStartingSequenceHelp": "Použije se pouze při úplně první faktuře (nastavení při přechodu). Jakmile máte alespoň jednu fakturu, číslování navazuje na nejvyšší v aktuálním období; nový rok/měsíc začíná od 1.",
+    "invoiceNumberResetPeriod": "Reset pořadového čísla",
+    "invoiceNumberResetPeriodYearly": "Každý rok",
+    "invoiceNumberResetPeriodMonthly": "Každý měsíc",
+    "pdfTemplate": "Šablona PDF faktury",
+    "pdfTemplateClassic": "Klasická",
+    "pdfTemplateMinimalistic": "Minimalistická"
   },
 
   "calculator": {

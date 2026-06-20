@@ -142,7 +142,7 @@ authRouter.post('/login',
 authRouter.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const result = await query(
-      `SELECT id, email, name, company_name, company_ico, company_dic, company_address, bank_account, bank_code, vat_payer, onboarding_completed, pausalni_dan_enabled, pausalni_dan_tier, pausalni_dan_limit, language, logo_data IS NOT NULL as has_logo, created_at
+      `SELECT id, email, name, company_name, company_ico, company_dic, company_address, company_register_info, bank_account, bank_code, vat_payer, onboarding_completed, pausalni_dan_enabled, pausalni_dan_tier, pausalni_dan_limit, language, logo_data IS NOT NULL as has_logo, created_at
        FROM users WHERE id = $1`,
       [req.userId]
     );
@@ -160,6 +160,7 @@ authRouter.get('/me', authenticateToken, async (req: AuthRequest, res: Response)
       companyIco: user.company_ico,
       companyDic: user.company_dic,
       companyAddress: user.company_address,
+      companyRegisterInfo: user.company_register_info,
       bankAccount: user.bank_account,
       bankCode: user.bank_code,
       vatPayer: user.vat_payer,
@@ -179,7 +180,7 @@ authRouter.get('/me', authenticateToken, async (req: AuthRequest, res: Response)
 
 // Update user profile
 authRouter.put('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
-  const { name, companyName, companyIco, companyDic, companyAddress, bankAccount, bankCode, vatPayer, onboardingCompleted, pausalniDanEnabled, pausalniDanTier, pausalniDanLimit, language } = req.body;
+  const { name, companyName, companyIco, companyDic, companyAddress, companyRegisterInfo, bankAccount, bankCode, vatPayer, onboardingCompleted, pausalniDanEnabled, pausalniDanTier, pausalniDanLimit, language } = req.body;
 
   try {
     const result = await query(
@@ -189,18 +190,19 @@ authRouter.put('/me', authenticateToken, async (req: AuthRequest, res: Response)
         company_ico = $3,
         company_dic = $4,
         company_address = $5,
-        bank_account = $6,
-        bank_code = $7,
-        vat_payer = COALESCE($8, vat_payer),
-        onboarding_completed = COALESCE($9, onboarding_completed),
-        pausalni_dan_enabled = COALESCE($10, pausalni_dan_enabled),
-        pausalni_dan_tier = COALESCE($11, pausalni_dan_tier),
-        pausalni_dan_limit = COALESCE($12, pausalni_dan_limit),
-        language = COALESCE($13, language),
+        company_register_info = $6,
+        bank_account = $7,
+        bank_code = $8,
+        vat_payer = COALESCE($9, vat_payer),
+        onboarding_completed = COALESCE($10, onboarding_completed),
+        pausalni_dan_enabled = COALESCE($11, pausalni_dan_enabled),
+        pausalni_dan_tier = COALESCE($12, pausalni_dan_tier),
+        pausalni_dan_limit = COALESCE($13, pausalni_dan_limit),
+        language = COALESCE($14, language),
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $14
-       RETURNING id, email, name, company_name, company_ico, company_dic, company_address, bank_account, bank_code, vat_payer, onboarding_completed, pausalni_dan_enabled, pausalni_dan_tier, pausalni_dan_limit, language`,
-      [name, companyName, companyIco, companyDic, companyAddress, bankAccount, bankCode, vatPayer, onboardingCompleted, pausalniDanEnabled, pausalniDanTier, pausalniDanLimit, language, req.userId]
+       WHERE id = $15
+       RETURNING id, email, name, company_name, company_ico, company_dic, company_address, company_register_info, bank_account, bank_code, vat_payer, onboarding_completed, pausalni_dan_enabled, pausalni_dan_tier, pausalni_dan_limit, language`,
+      [name, companyName, companyIco, companyDic, companyAddress, companyRegisterInfo, bankAccount, bankCode, vatPayer, onboardingCompleted, pausalniDanEnabled, pausalniDanTier, pausalniDanLimit, language, req.userId]
     );
 
     if (result.rows.length === 0) {
@@ -216,6 +218,7 @@ authRouter.put('/me', authenticateToken, async (req: AuthRequest, res: Response)
       companyIco: user.company_ico,
       companyDic: user.company_dic,
       companyAddress: user.company_address,
+      companyRegisterInfo: user.company_register_info,
       bankAccount: user.bank_account,
       bankCode: user.bank_code,
       vatPayer: user.vat_payer,

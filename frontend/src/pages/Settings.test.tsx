@@ -27,6 +27,10 @@ vi.mock('lucide-react', () => ({
 }));
 
 const getVatSelect = () => document.querySelector('select[name="defaultVatRate"]') as HTMLSelectElement;
+const getPdfTemplateSelect = () => document.querySelector('select[name="invoicePdfTemplate"]') as HTMLSelectElement;
+const getInvoiceNumberFormatInput = () => document.querySelector('input[name="invoiceNumberFormat"]') as HTMLInputElement;
+const getStartingSequenceInput = () => document.querySelector('input[name="invoiceNumberStartingSequence"]') as HTMLInputElement;
+const getResetPeriodSelect = () => document.querySelector('select[name="invoiceNumberResetPeriod"]') as HTMLSelectElement;
 
 const defaultSettings = {
   smtpHost: null,
@@ -44,7 +48,10 @@ const defaultSettings = {
   bankNotificationEmail: null,
   emailPollingInterval: 300,
   invoiceNumberPrefix: '',
-  invoiceNumberFormat: 'YYYYMM##',
+  invoiceNumberFormat: '{YYYY}{MM}{SEQ2}',
+  invoiceNumberStartingSequence: 1,
+  invoiceNumberResetPeriod: 'monthly',
+  invoicePdfTemplate: 'classic',
   defaultVatRate: 21,
   defaultPaymentTerms: 14,
   emailTemplate: null,
@@ -120,5 +127,57 @@ describe('Settings Component', () => {
     // Paušální daň section should NOT be present (moved to Profile)
     expect(screen.queryByText('Paušální daň')).not.toBeInTheDocument();
     expect(screen.queryByText('Používám paušální daň')).not.toBeInTheDocument();
+  });
+
+  it('should load and save the minimalistic PDF template', async () => {
+    mockGet.mockResolvedValueOnce({ ...defaultSettings, invoicePdfTemplate: 'minimalistic' });
+    mockPut.mockResolvedValueOnce({ message: 'Settings updated successfully' });
+    mockGet.mockResolvedValueOnce({ ...defaultSettings, invoicePdfTemplate: 'minimalistic' });
+
+    render(<Settings />);
+
+    await waitFor(() => {
+      expect(getPdfTemplateSelect().value).toBe('minimalistic');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /uložit nastavení/i }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith('/settings', expect.objectContaining({
+        invoicePdfTemplate: 'minimalistic'
+      }));
+    });
+  });
+
+  it('should load and save invoice numbering settings', async () => {
+    mockGet.mockResolvedValueOnce({
+      ...defaultSettings,
+      invoiceNumberFormat: 'INV-{YYYY}-{SEQ4}',
+      invoiceNumberStartingSequence: 42,
+      invoiceNumberResetPeriod: 'yearly'
+    });
+    mockPut.mockResolvedValueOnce({ message: 'Settings updated successfully' });
+    mockGet.mockResolvedValueOnce(defaultSettings);
+
+    render(<Settings />);
+
+    await waitFor(() => {
+      expect(getInvoiceNumberFormatInput().value).toBe('INV-{YYYY}-{SEQ4}');
+      expect(getStartingSequenceInput().value).toBe('42');
+      expect(getResetPeriodSelect().value).toBe('yearly');
+    });
+
+    fireEvent.change(getInvoiceNumberFormatInput(), { target: { value: '{YY}/{SEQ3}' } });
+    fireEvent.change(getStartingSequenceInput(), { target: { value: '8' } });
+    fireEvent.change(getResetPeriodSelect(), { target: { value: 'monthly' } });
+    fireEvent.click(screen.getByRole('button', { name: /uložit nastavení/i }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith('/settings', expect.objectContaining({
+        invoiceNumberFormat: '{YY}/{SEQ3}',
+        invoiceNumberStartingSequence: 8,
+        invoiceNumberResetPeriod: 'monthly'
+      }));
+    });
   });
 });

@@ -106,6 +106,40 @@ describe('Settings Routes', () => {
       expect(values).toContain('encrypted:pplx-key-123');
     });
 
+    it('should update the invoice PDF template', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: '1', invoice_pdf_template: 'minimalistic' }] });
+
+      const response = await request(app)
+        .put('/settings')
+        .send({ invoicePdfTemplate: 'minimalistic' });
+
+      expect(response.status).toBe(200);
+      const [sql, values] = mockQuery.mock.calls[0];
+      expect(sql).toContain('invoice_pdf_template');
+      expect(values).toContain('minimalistic');
+    });
+
+    it('should update invoice numbering settings', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: '1' }] });
+
+      const response = await request(app)
+        .put('/settings')
+        .send({
+          invoiceNumberFormat: 'INV-{YYYY}-{SEQ4}',
+          invoiceNumberStartingSequence: 42,
+          invoiceNumberResetPeriod: 'yearly'
+        });
+
+      expect(response.status).toBe(200);
+      const [sql, values] = mockQuery.mock.calls[0];
+      expect(sql).toContain('invoice_number_format');
+      expect(sql).toContain('invoice_number_starting_sequence');
+      expect(sql).toContain('invoice_number_reset_period');
+      expect(values).toContain('INV-{YYYY}-{SEQ4}');
+      expect(values).toContain(42);
+      expect(values).toContain('yearly');
+    });
+
     it('should not include paušální daň fields in update', async () => {
       mockQuery.mockResolvedValueOnce({
         rows: [{ id: '1' }]
@@ -149,7 +183,10 @@ describe('Settings Routes', () => {
           bank_notification_email: null,
           email_polling_interval: 300,
           invoice_number_prefix: '',
-          invoice_number_format: 'YYYYMM##',
+          invoice_number_format: '{YYYY}{MM}{SEQ2}',
+          invoice_number_starting_sequence: 7,
+          invoice_number_reset_period: 'yearly',
+          invoice_pdf_template: 'classic',
           default_vat_rate: '0.00', // Stored as DECIMAL
           default_payment_terms: 14,
           email_template: null,
@@ -162,6 +199,9 @@ describe('Settings Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.defaultVatRate).toBe(0);
+      expect(response.body.invoiceNumberFormat).toBe('{YYYY}{MM}{SEQ2}');
+      expect(response.body.invoiceNumberStartingSequence).toBe(7);
+      expect(response.body.invoiceNumberResetPeriod).toBe('yearly');
     });
 
     it('should not return paušální daň fields', async () => {
@@ -183,6 +223,7 @@ describe('Settings Routes', () => {
           email_polling_interval: 300,
           invoice_number_prefix: '',
           invoice_number_format: 'YYYYMM##',
+          invoice_pdf_template: 'classic',
           default_vat_rate: '21.00',
           default_payment_terms: 14,
           email_template: null,
@@ -214,10 +255,48 @@ describe('Settings Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.defaultVatRate).toBe(21);
+      expect(response.body.invoiceNumberFormat).toBe('{YYYY}{MM}{SEQ2}');
+      expect(response.body.invoiceNumberStartingSequence).toBe(1);
+      expect(response.body.invoiceNumberResetPeriod).toBe('monthly');
+      expect(response.body.invoicePdfTemplate).toBe('classic');
       // Should not include paušální daň fields even in defaults
       expect(response.body.pausalniDanEnabled).toBeUndefined();
       expect(response.body.pausalniDanTier).toBeUndefined();
       expect(response.body.pausalniDanLimit).toBeUndefined();
+    });
+
+    it('should return minimalistic PDF template when configured', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          smtp_host: null,
+          smtp_port: 587,
+          smtp_user: null,
+          smtp_password: null,
+          smtp_secure: true,
+          smtp_from_email: null,
+          smtp_from_name: null,
+          imap_host: null,
+          imap_port: 993,
+          imap_user: null,
+          imap_password: null,
+          imap_tls: true,
+          bank_notification_email: null,
+          email_polling_interval: 300,
+          invoice_number_prefix: '',
+          invoice_number_format: 'YYYYMM##',
+          invoice_pdf_template: 'minimalistic',
+          default_vat_rate: '21.00',
+          default_payment_terms: 14,
+          email_template: null,
+          calculator_enabled: false,
+          perplexity_api_key: null
+        }]
+      });
+
+      const response = await request(app).get('/settings');
+
+      expect(response.status).toBe(200);
+      expect(response.body.invoicePdfTemplate).toBe('minimalistic');
     });
   });
 });

@@ -169,7 +169,7 @@ recurringRouter.post('/',
         await query(
           `INSERT INTO recurring_invoice_items (recurring_invoice_id, description, quantity, unit, unit_price, sort_order)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [template.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, i]
+          [template.id, item.description, item.quantity, item.unit || null, item.unitPrice, i]
         );
       }
 
@@ -247,7 +247,7 @@ recurringRouter.put('/:id',
           await query(
             `INSERT INTO recurring_invoice_items (recurring_invoice_id, description, quantity, unit, unit_price, sort_order)
              VALUES ($1, $2, $3, $4, $5, $6)`,
-            [req.params.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, i]
+            [req.params.id, item.description, item.quantity, item.unit || null, item.unitPrice, i]
           );
         }
       }

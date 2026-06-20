@@ -4,39 +4,100 @@ import { query } from '../db/init';
 import { AuthRequest } from '../middleware/auth';
 import { generateInvoicePDF } from '../services/pdfGenerator';
 import { sendInvoiceEmail } from '../services/emailSender';
-import { generateSpayd } from '../utils/validation';
+import { generateSpayd, generateInvoiceNumber as renderInvoiceNumber } from '../utils/validation';
 import { t, formatDateLocale, formatCurrencyLocale } from '../i18n/translations';
 import { convertEurToCzk } from '../services/cnbExchangeRate';
 
 export const invoiceRouter: ReturnType<typeof Router> = Router();
 
-// Generate invoice number based on issue date
+const DEFAULT_INVOICE_NUMBER_FORMAT = '{YYYY}{MM}{SEQ2}';
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Match invoice numbers for one numbering period and capture their sequence.
+type InvoiceNumberResetPeriod = 'monthly' | 'yearly';
+
+function buildSequenceRegex(
+  format: string,
+  prefix: string,
+  year: number,
+  month: number,
+  resetPeriod: InvoiceNumberResetPeriod
+): RegExp {
+  const tokenPattern = /\{(YYYY|YY|MM|SEQ(?:[2-4])?)\}/g;
+  let pattern = escapeRegex(prefix);
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenPattern.exec(format)) !== null) {
+    pattern += escapeRegex(format.slice(lastIndex, match.index));
+
+    const token = match[1];
+    if (token === 'YYYY') pattern += year.toString();
+    else if (token === 'YY') pattern += year.toString().slice(-2);
+    else if (token === 'MM') {
+      pattern += resetPeriod === 'monthly'
+        ? month.toString().padStart(2, '0')
+        : '(?:0[1-9]|1[0-2])';
+    } else {
+      const width = token === 'SEQ' ? 0 : parseInt(token.slice(3), 10);
+      pattern += width > 0 ? `(\\d{${width},})` : '(\\d+)';
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  pattern += escapeRegex(format.slice(lastIndex));
+  return new RegExp(`^${pattern}$`);
+}
+
+// Generate an invoice number using the configured template and the next
+// available sequence in the current month/year numbering period.
 export async function generateInvoiceNumber(userId: string, issueDate: string, attempt: number = 0): Promise<{ invoiceNumber: string; variableSymbol: string }> {
   const date = new Date(issueDate);
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const datePrefix = `${year}${month}`;
+  const month = date.getMonth() + 1;
 
-  // Get user's invoice number prefix from settings
   const settingsResult = await query(
-    'SELECT invoice_number_prefix FROM settings WHERE user_id = $1',
+    'SELECT invoice_number_prefix, invoice_number_format, invoice_number_starting_sequence, invoice_number_reset_period FROM settings WHERE user_id = $1',
     [userId]
   );
-  const userPrefix = settingsResult.rows[0]?.invoice_number_prefix || '';
+  const settings = settingsResult.rows[0] || {};
+  const prefix = settings.invoice_number_prefix || '';
+  const format = settings.invoice_number_format || DEFAULT_INVOICE_NUMBER_FORMAT;
+  const startingSequence = Math.max(1, parseInt(settings.invoice_number_starting_sequence, 10) || 1);
+  const resetPeriod: InvoiceNumberResetPeriod = settings.invoice_number_reset_period === 'yearly' ? 'yearly' : 'monthly';
 
-  // Get count of invoices this month (match with or without user prefix)
-  const result = await query(
-    `SELECT COUNT(*) FROM invoices
-     WHERE user_id = $1
-     AND invoice_number LIKE $2`,
-    [userId, `%${datePrefix}%`]
+  const sequencePattern = buildSequenceRegex(format, prefix, year, month, resetPeriod);
+  const existingInvoices = await query(
+    'SELECT invoice_number, issue_date FROM invoices WHERE user_id = $1',
+    [userId]
   );
 
-  const count = parseInt(result.rows[0].count) + 1 + attempt;
-  const invoiceNumber = `${userPrefix}${datePrefix}${String(count).padStart(2, '0')}`;
+  let highestSequence = 0;
+  const invoicesInPeriod = existingInvoices.rows.filter(row => {
+    const existingDate = new Date(row.issue_date);
+    return existingDate.getFullYear() === year
+      && (resetPeriod === 'yearly' || existingDate.getMonth() + 1 === month);
+  });
 
-  // Variable symbol should be numeric only for bank payments
-  const variableSymbol = `${datePrefix}${String(count).padStart(2, '0')}`;
+  for (const row of invoicesInPeriod) {
+    const match = sequencePattern.exec(row.invoice_number);
+    if (!match) continue;
+
+    const sequence = parseInt(match[1], 10);
+    if (!isNaN(sequence) && sequence > highestSequence) highestSequence = sequence;
+  }
+
+  // Starting sequence only bootstraps a user who has no invoices yet. New
+  // periods start at 1 after invoice history exists.
+  const periodStart = existingInvoices.rows.length === 0 ? startingSequence : 1;
+  const sequence = Math.max(highestSequence, periodStart - 1) + 1 + attempt;
+  const invoiceNumber = `${prefix}${renderInvoiceNumber(format, sequence, year, month)}`;
+
+  const variableSymbol = invoiceNumber.replace(/\D/g, '') || sequence.toString();
 
   return { invoiceNumber, variableSymbol };
 }
@@ -289,7 +350,7 @@ invoiceRouter.post('/',
         await query(
           `INSERT INTO invoice_items (invoice_id, description, quantity, unit, unit_price, total, sort_order)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [invoice.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, itemTotal, i]
+          [invoice.id, item.description, item.quantity, item.unit || null, item.unitPrice, itemTotal, i]
         );
       }
 
@@ -368,7 +429,7 @@ invoiceRouter.put('/:id',
           await query(
             `INSERT INTO invoice_items (invoice_id, description, quantity, unit, unit_price, total, sort_order)
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [req.params.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, itemTotal, i]
+            [req.params.id, item.description, item.quantity, item.unit || null, item.unitPrice, itemTotal, i]
           );
         }
       }
@@ -483,6 +544,10 @@ invoiceRouter.get('/:id/pdf', async (req: AuthRequest, res: Response) => {
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${req.params.id}.pdf"`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
     res.send(pdfBuffer);
   } catch (error) {
     console.error('Generate PDF error:', error);

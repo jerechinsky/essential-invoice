@@ -55,7 +55,17 @@
     "vatRate": "Default VAT rate (%)",
     "paymentTerms": "Default payment terms (days)",
     "invoiceNumberPrefix": "Invoice number prefix",
-    "invoiceNumberPrefixPlaceholder": "e.g. FV, INV"
+    "invoiceNumberPrefixPlaceholder": "e.g. FV, INV",
+    "invoiceNumberFormat": "Invoice number format",
+    "invoiceNumberFormatHelp": "Available tokens: YYYY (year), YY (2 digits), MM (month), SEQ / SEQ2 / SEQ3 / SEQ4 (zero-padded counter). Wrap each token in curly braces; tokens can appear in any order.",
+    "invoiceNumberStartingSequence": "Starting sequence",
+    "invoiceNumberStartingSequenceHelp": "Only applied to the first invoice you create (for migration setup). Once an invoice exists, numbering continues from the highest number in the current period; a new year/month starts at 1.",
+    "invoiceNumberResetPeriod": "Sequence reset",
+    "invoiceNumberResetPeriodYearly": "Every year",
+    "invoiceNumberResetPeriodMonthly": "Every month",
+    "pdfTemplate": "Invoice PDF template",
+    "pdfTemplateClassic": "Classic",
+    "pdfTemplateMinimalistic": "Minimalistic"
   },
 
   "calculator": {

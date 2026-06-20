@@ -111,14 +111,16 @@ export function czechAccountToIban(accountNumber: string, bankCode: string): str
 }
 
 /**
- * Generates invoice number based on format
+ * Generates invoice number based on format.
+ * Supported tokens: {YYYY}, {YY}, {MM}, {SEQ}, {SEQ2}, {SEQ3}, {SEQ4}
  */
-export function generateInvoiceNumber(format: string, sequence: number, year: number): string {
+export function generateInvoiceNumber(format: string, sequence: number, year: number, month: number = 1): string {
   return format
     .replace('{YYYY}', year.toString())
     .replace('{YY}', year.toString().slice(-2))
-    .replace('{SEQ}', sequence.toString())
-    .replace('{SEQ2}', sequence.toString().padStart(2, '0'))
+    .replace('{MM}', month.toString().padStart(2, '0'))
+    .replace('{SEQ4}', sequence.toString().padStart(4, '0'))
     .replace('{SEQ3}', sequence.toString().padStart(3, '0'))
-    .replace('{SEQ4}', sequence.toString().padStart(4, '0'));
+    .replace('{SEQ2}', sequence.toString().padStart(2, '0'))
+    .replace('{SEQ}', sequence.toString());
 }

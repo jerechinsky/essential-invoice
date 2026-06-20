@@ -169,5 +169,14 @@ describe('Validation Utilities', () => {
       expect(generateInvoiceNumber('F{YY}-{SEQ4}', 42, 2026)).toBe('F26-0042');
       expect(generateInvoiceNumber('INV/{YYYY}/{SEQ3}', 7, 2025)).toBe('INV/2025/007');
     });
+
+    it('should replace {MM} with zero-padded month', () => {
+      expect(generateInvoiceNumber('{YYYY}{MM}{SEQ2}', 3, 2026, 4)).toBe('20260403');
+      expect(generateInvoiceNumber('{YYYY}{MM}{SEQ2}', 12, 2026, 12)).toBe('20261212');
+    });
+
+    it('should default month to January when not provided', () => {
+      expect(generateInvoiceNumber('{YYYY}{MM}{SEQ2}', 1, 2026)).toBe('20260101');
+    });
   });
 });

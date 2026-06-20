@@ -28,6 +28,7 @@ export default function Profile() {
     companyIco: user?.companyIco || '',
     companyDic: user?.companyDic || '',
     companyAddress: user?.companyAddress || '',
+    companyRegisterInfo: user?.companyRegisterInfo || '',
     bankAccount: user?.bankAccount || '',
     bankCode: user?.bankCode || '',
     language: user?.language || 'cs',
@@ -300,6 +301,19 @@ export default function Profile() {
             className="input"
             rows={2}
           />
+        </div>
+
+        <div>
+          <label className="label">{t('company.registerInfo')}</label>
+          <textarea
+            name="companyRegisterInfo"
+            value={formData.companyRegisterInfo}
+            onChange={handleChange}
+            className="input"
+            rows={2}
+            placeholder={t('company.registerInfoPlaceholder')}
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('company.registerInfoHelp')}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

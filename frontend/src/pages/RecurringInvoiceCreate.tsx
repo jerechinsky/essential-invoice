@@ -41,7 +41,7 @@ export default function RecurringInvoiceCreate() {
   });
 
   const [items, setItems] = useState<RecurringItem[]>([
-    { description: '', quantity: 1, unit: 'ks', unitPrice: '' as unknown as number }
+    { description: '', quantity: 1, unit: '', unitPrice: '' as unknown as number }
   ]);
 
   useEffect(() => {
@@ -105,7 +105,7 @@ export default function RecurringInvoiceCreate() {
   }
 
   function addItem() {
-    setItems(prev => [...prev, { description: '', quantity: 1, unit: 'ks', unitPrice: '' as unknown as number }]);
+    setItems(prev => [...prev, { description: '', quantity: 1, unit: '', unitPrice: '' as unknown as number }]);
   }
 
   function removeItem(index: number) {

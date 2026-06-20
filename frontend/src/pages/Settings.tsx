@@ -21,6 +21,9 @@ interface Settings {
   emailPollingInterval: number;
   invoiceNumberPrefix: string;
   invoiceNumberFormat: string;
+  invoiceNumberStartingSequence: number;
+  invoiceNumberResetPeriod: 'monthly' | 'yearly';
+  invoicePdfTemplate: 'classic' | 'minimalistic';
   defaultVatRate: number;
   defaultPaymentTerms: number;
   emailTemplate: string | null;
@@ -28,6 +31,34 @@ interface Settings {
   aiEnabled: boolean;
   perplexityApiKeySet: boolean;
 }
+
+type SettingsFormData = {
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPassword: string;
+  smtpSecure: boolean;
+  smtpFromEmail: string;
+  smtpFromName: string;
+  imapHost: string;
+  imapPort: number;
+  imapUser: string;
+  imapPassword: string;
+  imapTls: boolean;
+  bankNotificationEmail: string;
+  emailPollingInterval: number;
+  invoiceNumberPrefix: string;
+  invoiceNumberFormat: string;
+  invoiceNumberStartingSequence: number;
+  invoiceNumberResetPeriod: 'monthly' | 'yearly';
+  invoicePdfTemplate: 'classic' | 'minimalistic';
+  defaultVatRate: number;
+  defaultPaymentTerms: number;
+  emailTemplate: string;
+  calculatorEnabled: boolean;
+  aiEnabled: boolean;
+  perplexityApiKey: string;
+};
 
 export default function Settings() {
   const { t } = useTranslation('settings');
@@ -37,7 +68,7 @@ export default function Settings() {
   const [testing, setTesting] = useState<'smtp' | 'imap' | null>(null);
   const [showPasswords, setShowPasswords] = useState({ smtp: false, imap: false, perplexity: false });
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<SettingsFormData>({
     smtpHost: '',
     smtpPort: 587,
     smtpUser: '',
@@ -53,6 +84,10 @@ export default function Settings() {
     bankNotificationEmail: '',
     emailPollingInterval: 300,
     invoiceNumberPrefix: '',
+    invoiceNumberFormat: '{YYYY}{MM}{SEQ2}',
+    invoiceNumberStartingSequence: 1,
+    invoiceNumberResetPeriod: 'monthly',
+    invoicePdfTemplate: 'classic',
     defaultVatRate: 21,
     defaultPaymentTerms: 14,
     emailTemplate: '',
@@ -85,6 +120,10 @@ export default function Settings() {
         bankNotificationEmail: result.bankNotificationEmail || '',
         emailPollingInterval: result.emailPollingInterval ?? 300,
         invoiceNumberPrefix: result.invoiceNumberPrefix || '',
+        invoiceNumberFormat: result.invoiceNumberFormat || '{YYYY}{MM}{SEQ2}',
+        invoiceNumberStartingSequence: result.invoiceNumberStartingSequence ?? 1,
+        invoiceNumberResetPeriod: result.invoiceNumberResetPeriod === 'yearly' ? 'yearly' : 'monthly',
+        invoicePdfTemplate: result.invoicePdfTemplate === 'minimalistic' ? 'minimalistic' : 'classic',
         defaultVatRate: result.defaultVatRate ?? 21,
         defaultPaymentTerms: result.defaultPaymentTerms ?? 14,
         emailTemplate: result.emailTemplate || '',
@@ -101,7 +140,7 @@ export default function Settings() {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     const { name, value, type } = e.target;
-    const numericFields = ['smtpPort', 'imapPort', 'emailPollingInterval', 'defaultVatRate', 'defaultPaymentTerms'];
+    const numericFields = ['smtpPort', 'imapPort', 'emailPollingInterval', 'defaultVatRate', 'defaultPaymentTerms', 'invoiceNumberStartingSequence'];
 
     setFormData(prev => ({
       ...prev,
@@ -450,7 +489,7 @@ export default function Settings() {
                 min={1}
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <label className="label">{t('invoiceDefaults.invoiceNumberPrefix')}</label>
               <input
                 type="text"
@@ -460,6 +499,58 @@ export default function Settings() {
                 className="input"
                 placeholder={t('invoiceDefaults.invoiceNumberPrefixPlaceholder')}
               />
+            </div>
+            <div>
+              <label className="label">{t('invoiceDefaults.invoiceNumberStartingSequence')}</label>
+              <input
+                type="number"
+                name="invoiceNumberStartingSequence"
+                value={formData.invoiceNumberStartingSequence}
+                onChange={handleChange}
+                className="input"
+                min={1}
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {t('invoiceDefaults.invoiceNumberStartingSequenceHelp')}
+              </p>
+            </div>
+            <div className="md:col-span-2">
+              <label className="label">{t('invoiceDefaults.invoiceNumberFormat')}</label>
+              <input
+                type="text"
+                name="invoiceNumberFormat"
+                value={formData.invoiceNumberFormat}
+                onChange={handleChange}
+                className="input font-mono"
+                placeholder="{YYYY}{MM}{SEQ2}"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {t('invoiceDefaults.invoiceNumberFormatHelp')}
+              </p>
+            </div>
+            <div>
+              <label className="label">{t('invoiceDefaults.invoiceNumberResetPeriod')}</label>
+              <select
+                name="invoiceNumberResetPeriod"
+                value={formData.invoiceNumberResetPeriod}
+                onChange={handleChange}
+                className="input"
+              >
+                <option value="yearly">{t('invoiceDefaults.invoiceNumberResetPeriodYearly')}</option>
+                <option value="monthly">{t('invoiceDefaults.invoiceNumberResetPeriodMonthly')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">{t('invoiceDefaults.pdfTemplate')}</label>
+              <select
+                name="invoicePdfTemplate"
+                value={formData.invoicePdfTemplate}
+                onChange={handleChange}
+                className="input"
+              >
+                <option value="classic">{t('invoiceDefaults.pdfTemplateClassic')}</option>
+                <option value="minimalistic">{t('invoiceDefaults.pdfTemplateMinimalistic')}</option>
+              </select>
             </div>
           </div>
         </div>

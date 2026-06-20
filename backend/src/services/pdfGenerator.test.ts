@@ -40,8 +40,12 @@ function makeInvoiceRow(overrides: Record<string, any> = {}) {
     user_address: 'Dodavatelská 456, Brno',
     user_ico: '87654321',
     user_dic: 'CZ87654321',
+    user_vat_payer: true,
     user_bank_account: '192000145399',
     user_bank_code: '0800',
+    user_company_register_info: null,
+    invoice_pdf_template: 'classic',
+    user_language: 'cs',
     user_logo_data: null,
     user_logo_mime_type: null,
     ...overrides,
@@ -153,5 +157,112 @@ describe('generateInvoicePDF', () => {
 
     const { generateInvoicePDF } = await import('./pdfGenerator.js');
     await expect(generateInvoicePDF('missing', 'user-1')).rejects.toThrow('Invoice not found');
+  });
+
+  it('should add more space under party addresses and anchor the footer to the page bottom', async () => {
+    const { __test__ } = await import('./pdfGenerator.js');
+
+    const doc = __test__.buildMinimalisticDocumentDefinition({
+      id: 'inv-1',
+      invoiceNumber: 'FV2024001',
+      variableSymbol: '2024001',
+      status: 'sent',
+      currency: 'CZK',
+      issueDate: new Date('2024-01-15'),
+      dueDate: new Date('2024-02-15'),
+      deliveryDate: new Date('2024-01-15'),
+      subtotal: 10000,
+      vatRate: 21,
+      vatAmount: 2100,
+      total: 12100,
+      notes: '',
+      qrPaymentData: 'SPD*1.0',
+      exchangeRate: null,
+      totalCzk: null,
+      clientName: 'Test Klient s.r.o.',
+      clientAddress: 'Kundratka 2359/17, 18000 Praha',
+      clientIco: '12345678',
+      clientDic: 'CZ12345678',
+      userName: 'Jan Novák',
+      userCompanyName: 'Novák IT',
+      userAddress: 'Neveklovice 44\n29413 Neveklovice',
+      userIco: '87654321',
+      userDic: 'CZ87654321',
+      userVatPayer: true,
+      userBankAccount: '192000145399',
+      userBankCode: '0800',
+      userCompanyRegisterInfo: 'Zapsáno v OR',
+      userLogoDataUrl: null,
+      invoicePdfTemplate: 'minimalistic',
+      language: 'cs',
+      items: [{
+        description: 'Služby',
+        quantity: 1,
+        unit: '',
+        unitPrice: 10000,
+        total: 10000,
+      }],
+    }, 'data:image/png;base64,qr');
+
+    const documentContent = doc.content as any[];
+    const partiesSection = documentContent[1];
+    expect(partiesSection.table.body[2][0].margin).toEqual([0, 12, 0, 0]);
+    expect(partiesSection.table.body[2][2].margin).toEqual([0, 12, 0, 0]);
+
+    const footer = (typeof doc.background === 'function'
+      ? doc.background(1, {} as any)
+      : doc.background) as any;
+    expect(footer.absolutePosition).toEqual({ x: 40, y: 791.49 });
+    expect(footer.stack).toEqual([{ text: 'Zapsáno v OR', fontSize: 8, color: '#6b7280' }]);
+  });
+
+  it('should keep the classic PDF template as the default and include registry footer text', async () => {
+    const { __test__ } = await import('./pdfGenerator.js');
+
+    const doc = __test__.buildClassicDocumentDefinition({
+      id: 'inv-1',
+      invoiceNumber: 'FV2024001',
+      variableSymbol: '2024001',
+      status: 'sent',
+      currency: 'CZK',
+      issueDate: new Date('2024-01-15'),
+      dueDate: new Date('2024-02-15'),
+      deliveryDate: new Date('2024-01-15'),
+      subtotal: 10000,
+      vatRate: 21,
+      vatAmount: 2100,
+      total: 12100,
+      notes: '',
+      qrPaymentData: 'SPD*1.0',
+      exchangeRate: null,
+      totalCzk: null,
+      clientName: 'Test Klient s.r.o.',
+      clientAddress: 'Kundratka 2359/17, 18000 Praha',
+      clientIco: '12345678',
+      clientDic: 'CZ12345678',
+      userName: 'Jan Novák',
+      userCompanyName: 'Novák IT',
+      userAddress: 'Dodavatelská 456, Brno',
+      userIco: '87654321',
+      userDic: 'CZ87654321',
+      userVatPayer: true,
+      userBankAccount: '192000145399',
+      userBankCode: '0800',
+      userCompanyRegisterInfo: 'Společnost je zapsána v obchodním rejstříku',
+      userLogoDataUrl: null,
+      invoicePdfTemplate: 'classic',
+      language: 'cs',
+      items: [{
+        description: 'Služby',
+        quantity: 1,
+        unit: '',
+        unitPrice: 10000,
+        total: 10000,
+      }],
+    }, 'data:image/png;base64,qr');
+
+    expect(doc.defaultStyle?.font).toBe('Roboto');
+    expect(doc.pageMargins).toEqual([30, 30, 30, 30]);
+    expect(JSON.stringify(doc.content)).toContain('Společnost je zapsána v obchodním rejstříku');
   });
 });

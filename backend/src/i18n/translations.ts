@@ -3,20 +3,26 @@ export type Locale = 'cs' | 'en';
 interface PdfTranslations {
   invoice: string;
   invoiceNumberShort: string;
+  taxDocument: string;
   supplier: string;
   customer: string;
   issueDate: string;
   dueDate: string;
+  deliveryDate: string;
   description: string;
   quantity: string;
   unitPrice: string;
+  priceLabel: string;
   total: string;
   subtotal: string;
   vat: string;
   totalDue: string;
   paymentDetails: string;
   accountNumber: string;
+  bankAccount: string;
   variableSymbol: string;
+  paymentMethod: string;
+  paymentMethodTransfer: string;
   amount: string;
   qrPayment: string;
   notes: string;
@@ -46,29 +52,35 @@ interface Translations {
 const translations: Record<Locale, Translations> = {
   cs: {
     pdf: {
-      invoice: 'FAKTURA',
+      invoice: 'Faktura',
       invoiceNumberShort: 'č.',
+      taxDocument: 'DAŇOVÝ DOKLAD',
       supplier: 'DODAVATEL',
       customer: 'ODBĚRATEL',
-      issueDate: 'DATUM VYSTAVENÍ',
-      dueDate: 'DATUM SPLATNOSTI',
-      description: 'POPIS',
-      quantity: 'MNOŽSTVÍ',
-      unitPrice: 'CENA ZA JEDNOTKU',
-      total: 'CELKEM',
-      subtotal: 'Základ daně:',
+      issueDate: 'Datum vystavení',
+      dueDate: 'Datum splatnosti',
+      deliveryDate: 'Datum zdan. plnění',
+      description: 'Popis',
+      quantity: 'Množství',
+      unitPrice: 'Cena za jednotku',
+      priceLabel: 'CENA',
+      total: 'Celkem',
+      subtotal: 'Celkem bez DPH',
       vat: 'DPH',
-      totalDue: 'Celkem k úhradě:',
+      totalDue: 'Celkem k úhradě',
       paymentDetails: 'Platební údaje',
-      accountNumber: 'Číslo účtu:',
-      variableSymbol: 'Variabilní symbol:',
-      amount: 'Částka:',
-      qrPayment: 'QR platba',
-      notes: 'Poznámky:',
+      accountNumber: 'Číslo účtu',
+      bankAccount: 'Bankovní účet',
+      variableSymbol: 'Variabilní symbol',
+      paymentMethod: 'Způsob platby',
+      paymentMethodTransfer: 'Převodem',
+      amount: 'Částka',
+      qrPayment: 'QR Platba',
+      notes: 'Poznámky',
       issuedOn: 'Vystaveno dne',
       nonVatPayer: 'Neplátce DPH',
-      exchangeRate: 'Kurz CNB:',
-      czkEquivalent: 'Ekvivalent v CZK:',
+      exchangeRate: 'Kurz CNB',
+      czkEquivalent: 'Ekvivalent v CZK',
     },
     email: {
       invoiceSubject: 'Faktura č. {{number}}',
@@ -118,29 +130,35 @@ S pozdravem,
   },
   en: {
     pdf: {
-      invoice: 'INVOICE',
+      invoice: 'Invoice',
       invoiceNumberShort: 'No.',
+      taxDocument: 'TAX DOCUMENT',
       supplier: 'SUPPLIER',
       customer: 'CUSTOMER',
-      issueDate: 'ISSUE DATE',
-      dueDate: 'DUE DATE',
-      description: 'DESCRIPTION',
-      quantity: 'QUANTITY',
-      unitPrice: 'UNIT PRICE',
-      total: 'TOTAL',
-      subtotal: 'Subtotal:',
+      issueDate: 'Issue date',
+      dueDate: 'Due date',
+      deliveryDate: 'Date of supply',
+      description: 'Description',
+      quantity: 'Quantity',
+      unitPrice: 'Unit price',
+      priceLabel: 'PRICE',
+      total: 'Total',
+      subtotal: 'Subtotal',
       vat: 'VAT',
-      totalDue: 'Total due:',
+      totalDue: 'Total due',
       paymentDetails: 'Payment details',
-      accountNumber: 'Account number:',
-      variableSymbol: 'Variable symbol:',
-      amount: 'Amount:',
-      qrPayment: 'QR payment',
-      notes: 'Notes:',
+      accountNumber: 'Account number',
+      bankAccount: 'Bank account',
+      variableSymbol: 'Variable symbol',
+      paymentMethod: 'Payment method',
+      paymentMethodTransfer: 'Bank transfer',
+      amount: 'Amount',
+      qrPayment: 'QR Payment',
+      notes: 'Notes',
       issuedOn: 'Issued on',
       nonVatPayer: 'Non-VAT payer',
-      exchangeRate: 'CNB rate:',
-      czkEquivalent: 'CZK equivalent:',
+      exchangeRate: 'CNB rate',
+      czkEquivalent: 'CZK equivalent',
     },
     email: {
       invoiceSubject: 'Invoice No. {{number}}',
