@@ -32,7 +32,7 @@ docker compose up -d           # Start all services (dev)
 docker compose up -d db        # Start only database (for local dev)
 docker compose logs backend    # View backend logs
 # Production: docker compose -f docker-compose.production.yml up -d
-# Secure fresh server: ./deploy.sh init && ./deploy.sh deploy
+# Remote Docker host: copy deploy.env.example to deploy.env, then ./deploy.sh
 ```
 
 ### Helm (Kubernetes)

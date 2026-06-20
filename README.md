@@ -44,11 +44,12 @@ docker compose up -d
 
 Access the application at `http://localhost:8080` and register your first user account.
 
-For a secure fresh server installation with generated secrets, an internal-only database network, automatic backups, and health checks:
+To deploy from your computer to a Docker host (including a Proxmox VM/LXC), build the images on that host, back up an existing database, and verify application health:
 
 ```bash
-./deploy.sh init
-./deploy.sh deploy
+cp deploy.env.example deploy.env
+# Edit deploy.env and create .env from .env.example.
+./deploy.sh
 ```
 
 See [Deployment](docs/deployment.md) before exposing the application outside your LAN.
