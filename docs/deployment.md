@@ -1,6 +1,6 @@
 # Deployment
 
-## Docker Compose (Recommended)
+## Local Development with Docker Compose
 
 ### Quick Start
 
@@ -29,12 +29,68 @@ docker compose up -d
 
 5. Access the application at `http://localhost:8080`
 
-### Production
+## Secure Single-Server Deployment (Docker in a Proxmox LXC/VM)
 
-Use the production compose file:
+Use `docker-compose.server.yml` and the root `deploy.sh`. This deployment:
+
+- exposes only the frontend port (bound to `127.0.0.1` by default);
+- keeps PostgreSQL and the backend API off the host network;
+- requires generated database, JWT, and encryption secrets;
+- runs application containers with restricted privileges and read-only filesystems;
+- creates a compressed PostgreSQL backup before every later deployment.
+
+### First installation
+
 ```bash
-docker compose -f docker-compose.production.yml up -d
+git clone https://github.com/jerechinsky/essential-invoice.git
+cd essential-invoice
+./deploy.sh init
+./deploy.sh deploy
 ```
+
+`./deploy.sh init` creates `.env.server` with mode `600` and random secrets. Set `APP_URL` to the final URL before deploying. Keep `BIND_ADDRESS=127.0.0.1` when the TLS reverse proxy runs in the same LXC/VM.
+
+### HTTPS with Caddy
+
+Point the domain's DNS record to the server, allow inbound TCP ports 80 and 443, and use a Caddy configuration such as:
+
+```caddyfile
+invoice.example.com {
+  reverse_proxy 127.0.0.1:8080
+}
+```
+
+Do not expose ports 5432 (PostgreSQL) or 3001 (backend). Do not expose port 8080 publicly when Caddy runs on the same server.
+
+### Redeploying a new release
+
+```bash
+git fetch origin
+git switch master
+git pull --ff-only origin master
+./deploy.sh deploy
+```
+
+The script backs up a running database, rebuilds both application images, recreates changed containers without deleting the database volume, and checks `/api/health`.
+
+Useful commands:
+
+```bash
+./deploy.sh status
+./deploy.sh logs
+./deploy.sh backup
+```
+
+### Replacing an old installation from scratch
+
+The following intentionally deletes the old database. Run it only when no old data is required:
+
+```bash
+cd /path/to/old/essential-invoice
+docker compose down -v --remove-orphans
+```
+
+Then move the old checkout aside, clone the consolidated release, and follow **First installation** above. Never reuse an old `.env` for a clean installation; generate new secrets with `./deploy.sh init`.
 
 ## Kubernetes (Helm)
 
@@ -50,23 +106,25 @@ helm install essential-invoice . \
 
 See [helm-chart/README.md](../helm-chart/README.md) for full configuration reference.
 
-## Backup
+## Manual Backup
 
 ### Database Backup
 
 ```bash
 # Create backup
-docker compose exec db pg_dump -U postgres essential_invoice > backup.sql
+docker compose --env-file .env.server -f docker-compose.server.yml exec -T db \
+  sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backup.sql
 
 # Restore backup
-docker compose exec -T db psql -U postgres essential_invoice < backup.sql
+docker compose --env-file .env.server -f docker-compose.server.yml exec -T db \
+  sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"' < backup.sql
 ```
 
 ### Volume Backup
 
 ```bash
 # Stop containers
-docker compose down
+docker compose --env-file .env.server -f docker-compose.server.yml down
 
 # Backup volume
 docker run --rm -v essential-invoice_postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/db-backup.tar.gz -C /data .

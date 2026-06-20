@@ -126,7 +126,10 @@ essential-invoice/
 ├── helm-chart/              # Helm chart (see helm-chart/README.md)
 ├── docker-compose.yml
 ├── docker-compose.production.yml
+├── docker-compose.server.yml  # Hardened build-from-source server stack
+├── deploy.sh                  # Secure init, backup, deploy, health check
 ├── .env.example
+├── .env.server.example
 ├── CLAUDE.md
 └── README.md
 ```

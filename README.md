@@ -44,6 +44,15 @@ docker compose up -d
 
 Access the application at `http://localhost:8080` and register your first user account.
 
+For a secure fresh server installation with generated secrets, an internal-only database network, automatic backups, and health checks:
+
+```bash
+./deploy.sh init
+./deploy.sh deploy
+```
+
+See [Deployment](docs/deployment.md) before exposing the application outside your LAN.
+
 ### Kubernetes
 
 ```bash

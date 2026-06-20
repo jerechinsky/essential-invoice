@@ -9,6 +9,10 @@ build/
 .env
 .env.local
 .env.*.local
+.env.server
+
+# Server deployment artifacts
+backups/
 
 # IDE
 .vscode/
