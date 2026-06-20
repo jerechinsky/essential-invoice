@@ -67,9 +67,9 @@ Both endpoints accept JSON in the form `{ "csv": "..." }`. Imports are limited t
 - `GET /api/expenses` - List expenses (filters: status, clientId, from, to)
 - `GET /api/expenses/:id` - Get expense details
 - `GET /api/expenses/:id/file` - Download attached file
-- `POST /api/expenses` - Create expense with optional file upload
+- `POST /api/expenses` - Create a paid expense by default, with optional file upload
 - `POST /api/expenses/import/preview` - Parse one Alza PDF and return expense fields without saving (`multipart/form-data`, field `file`)
-- `POST /api/expenses/import` - Parse and create up to 10 Alza expenses independently (`multipart/form-data`, repeated field `files`)
+- `POST /api/expenses/import` - Parse and create up to 10 paid Alza expenses independently (`multipart/form-data`, repeated field `files`). Creates an Alza supplier contact by IČO when missing and assigns it to every imported expense. Uses Alza's printed final total including its rounding line.
 - `PUT /api/expenses/:id` - Update expense
 - `DELETE /api/expenses/:id` - Delete expense
 - `POST /api/expenses/:id/mark-paid` - Mark as paid

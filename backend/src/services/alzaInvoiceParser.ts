@@ -3,6 +3,8 @@ import { inflateSync } from 'node:zlib';
 export interface ParsedAlzaInvoice {
   supplier: 'Alza.cz a.s.';
   supplierIco: '27082440';
+  supplierDic: 'CZ27082440';
+  supplierAddress: 'Jankovcova 1522/53, 17000 Praha 7';
   supplierInvoiceNumber: string;
   issueDate: string;
   dueDate: string;
@@ -10,6 +12,7 @@ export interface ParsedAlzaInvoice {
   amount: number;
   vatRate: number;
   vatAmount: number;
+  roundingAmount: number;
   total: number;
   description: string;
 }
@@ -225,14 +228,18 @@ export function parseAlzaInvoiceText(text: string): ParsedAlzaInvoice {
 
   const amount = parseCzechNumber(vat[2]);
   const vatAmount = parseCzechNumber(vat[3]);
-  const total = parseCzechNumber(totals[0][1]);
-  if (Math.abs(amount + vatAmount - total) > 0.02) {
+  const rounding = normalized.match(/Zaokrouhlení:\s*(-?[\d .]+,\d{2})\s*Kč/i)?.[1];
+  const roundingAmount = rounding ? parseCzechNumber(rounding) : 0;
+  const total = parseCzechNumber(totals[totals.length - 1][1]);
+  if (Math.abs(amount + vatAmount + roundingAmount - total) > 0.02) {
     throw new Error('The Alza invoice totals do not add up');
   }
 
   return {
     supplier: 'Alza.cz a.s.',
     supplierIco: '27082440',
+    supplierDic: 'CZ27082440',
+    supplierAddress: 'Jankovcova 1522/53, 17000 Praha 7',
     supplierInvoiceNumber,
     issueDate,
     dueDate,
@@ -240,6 +247,7 @@ export function parseAlzaInvoiceText(text: string): ParsedAlzaInvoice {
     amount,
     vatRate: Number(vat[1]),
     vatAmount,
+    roundingAmount,
     total,
     description,
   };

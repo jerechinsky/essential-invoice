@@ -166,7 +166,7 @@ ingress:
   host: invoice.example.com
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "55m"
   tls:
     - secretName: essential-invoice-tls
       hosts:

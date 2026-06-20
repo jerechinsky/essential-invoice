@@ -3,7 +3,7 @@ import { body, validationResult } from 'express-validator';
 import multer from 'multer';
 import { query } from '../db/init';
 import { AuthRequest } from '../middleware/auth';
-import { parseAlzaInvoice } from '../services/alzaInvoiceParser';
+import { parseAlzaInvoice, ParsedAlzaInvoice } from '../services/alzaInvoiceParser';
 
 export const expenseRouter: ReturnType<typeof Router> = Router();
 const pdfUpload = multer({
@@ -32,6 +32,23 @@ async function generateExpenseNumber(userId: string, issueDate: string, attempt:
   return `${datePrefix}${String(count).padStart(2, '0')}`;
 }
 
+async function ensureAlzaSupplier(userId: string, parsed: ParsedAlzaInvoice): Promise<string> {
+  const existing = await query(
+    'SELECT id FROM clients WHERE user_id = $1 AND ico = $2 LIMIT 1',
+    [userId, parsed.supplierIco]
+  );
+  if (existing.rows[0]?.id) return existing.rows[0].id;
+
+  const created = await query(
+    `INSERT INTO clients (user_id, company_name, primary_email, address, ico, dic, notes)
+     VALUES ($1, $2, '', $3, $4, $5, $6)
+     RETURNING id`,
+    [userId, parsed.supplier, parsed.supplierAddress, parsed.supplierIco, parsed.supplierDic,
+     'Automatically created from Alza expense PDF import']
+  );
+  return created.rows[0].id;
+}
+
 // Parse one Alza PDF without saving it, so the normal form can be reviewed before creation.
 expenseRouter.post('/import/preview', pdfUpload.single('file'), async (req: AuthRequest, res: Response) => {
   if (!req.file) return res.status(400).json({ error: 'A PDF file is required' });
@@ -50,6 +67,7 @@ expenseRouter.post('/import', pdfUpload.array('files', 10), async (req: AuthRequ
 
   const imported: Array<{ fileName: string; id: string; expenseNumber: string; supplierInvoiceNumber: string }> = [];
   const failed: Array<{ fileName: string; error: string }> = [];
+  let alzaClientId: string | undefined;
 
   for (const file of files) {
     try {
@@ -60,11 +78,7 @@ expenseRouter.post('/import', pdfUpload.array('files', 10), async (req: AuthRequ
       );
       if (duplicate.rows.length) throw new Error(`Invoice ${parsed.supplierInvoiceNumber} has already been imported`);
 
-      const supplier = await query(
-        'SELECT id FROM clients WHERE user_id = $1 AND ico = $2 LIMIT 1',
-        [req.userId, parsed.supplierIco]
-      );
-      const clientId = supplier.rows[0]?.id ?? null;
+      alzaClientId ??= await ensureAlzaSupplier(req.userId!, parsed);
 
       let expenseNumber = '';
       let importedId = '';
@@ -74,10 +88,10 @@ expenseRouter.post('/import', pdfUpload.array('files', 10), async (req: AuthRequ
           const result = await query(
             `INSERT INTO expenses (user_id, client_id, expense_number, supplier_invoice_number,
              status, currency, issue_date, due_date, amount, vat_rate, vat_amount, total,
-             description, file_data, file_name, file_mime_type)
-             VALUES ($1, $2, $3, $4, 'unpaid', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'application/pdf')
+             description, file_data, file_name, file_mime_type, paid_at)
+             VALUES ($1, $2, $3, $4, 'paid', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'application/pdf', CURRENT_TIMESTAMP)
              RETURNING id`,
-            [req.userId, clientId, expenseNumber, parsed.supplierInvoiceNumber,
+            [req.userId, alzaClientId, expenseNumber, parsed.supplierInvoiceNumber,
              parsed.currency, parsed.issueDate, parsed.dueDate, parsed.amount, parsed.vatRate,
              parsed.vatAmount, parsed.total, parsed.description, file.buffer.toString('base64'), file.originalname]
           );
@@ -243,6 +257,11 @@ expenseRouter.post('/',
     return true;
   }),
   body('vatRate').optional().isNumeric(),
+  body('vatAmount').optional().isNumeric(),
+  body('total').optional().isNumeric().custom((value) => {
+    if (parseFloat(value) <= 0) throw new Error('Total must be greater than 0');
+    return true;
+  }),
   body('currency').optional().isIn(['CZK', 'EUR']),
   body('clientId').optional({ values: 'falsy' }).isUUID(),
   body('supplierInvoiceNumber').optional().isLength({ max: 100 }),
@@ -257,7 +276,7 @@ expenseRouter.post('/',
 
     const {
       clientId, issueDate, dueDate, deliveryDate, currency = 'CZK',
-      amount, vatRate = 21, supplierInvoiceNumber,
+      amount, vatRate = 21, vatAmount: suppliedVatAmount, total: suppliedTotal, supplierInvoiceNumber,
       description, notes, fileData, fileName, fileMimeType
     } = req.body;
 
@@ -273,8 +292,10 @@ expenseRouter.post('/',
         }
       }
 
-      const vatAmount = parseFloat(amount) * (parseFloat(vatRate) / 100);
-      const total = parseFloat(amount) + vatAmount;
+      const vatAmount = suppliedVatAmount !== undefined
+        ? parseFloat(suppliedVatAmount)
+        : parseFloat(amount) * (parseFloat(vatRate) / 100);
+      const total = suppliedTotal !== undefined ? parseFloat(suppliedTotal) : parseFloat(amount) + vatAmount;
 
       // Retry loop to handle race conditions with expense number generation
       const MAX_RETRIES = 3;
@@ -287,8 +308,8 @@ expenseRouter.post('/',
             `INSERT INTO expenses (user_id, client_id, expense_number, supplier_invoice_number,
              status, currency, issue_date, due_date, delivery_date,
              amount, vat_rate, vat_amount, total,
-             description, notes, file_data, file_name, file_mime_type)
-             VALUES ($1, $2, $3, $4, 'unpaid', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+             description, notes, file_data, file_name, file_mime_type, paid_at)
+             VALUES ($1, $2, $3, $4, 'paid', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
              RETURNING *`,
             [req.userId, clientId || null, expenseNumber, supplierInvoiceNumber || null,
              currency, issueDate, dueDate, deliveryDate || null,

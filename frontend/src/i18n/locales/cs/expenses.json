@@ -13,6 +13,7 @@
       "failed": "Nepodařilo se importovat: {{count}}",
       "requestFailed": "Import faktur se nezdařil",
       "tooMany": "Najednou lze importovat nejvýše 10 PDF",
+      "fileTooLarge": "Soubor {{fileName}} překračuje limit 5 MB",
       "result": "Neimportované soubory"
     },
     "table": {

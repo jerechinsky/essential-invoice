@@ -1,4 +1,4 @@
-FROM oven/bun:1-debian AS builder
+FROM oven/bun:1 AS builder
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY . .
 RUN bun run build
 
 # Production
-FROM nginx:alpine
+FROM nginx:1.28-alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
@@ -21,5 +21,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD ["nginx", "-t"]
 
 EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]

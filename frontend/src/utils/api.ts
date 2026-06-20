@@ -9,6 +9,17 @@ class ApiError extends Error {
   }
 }
 
+async function uploadError(response: Response): Promise<ApiError> {
+  let message = 'Upload failed';
+  try {
+    const body = await response.json();
+    if (body?.error) message = body.error;
+  } catch {
+    // Reverse proxies often return an HTML error page, which is not useful in a toast.
+  }
+  return new ApiError(`${message} (HTTP ${response.status})`, response.status);
+}
+
 async function request(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
 
@@ -91,8 +102,7 @@ export const api = {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
-      throw new ApiError(error.error || 'Upload failed', response.status);
+      throw await uploadError(response);
     }
 
     return response.json();
@@ -110,8 +120,7 @@ export const api = {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
-      throw new ApiError(error.error || 'Upload failed', response.status);
+      throw await uploadError(response);
     }
 
     return response.json();

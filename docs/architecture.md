@@ -7,7 +7,7 @@ Essential Invoice is a self-hosted invoicing application for Czech freelancers w
 - **Express API** with JWT authentication and rate limiting
 - **Entry point**: `index.ts` - Express app setup, middleware, route mounting
 - **Routes**: `routes/` - REST endpoints for auth (register, login, forgot-password, reset-password, delete account), clients, invoices, Fakturoid invoice imports, recurring invoices, expenses, payments, settings, ARES lookup, dashboard, AI. The dashboard derives a configurable 1–12 month VAT estimate from issued-invoice VAT minus VAT on paid expenses.
-- **Alza expense import**: `services/alzaInvoiceParser.ts` extracts the embedded text layer from Alza PDFs, maps invoice fields, and powers single-file previews and batch imports without OCR
+- **Alza expense import**: `services/alzaInvoiceParser.ts` extracts the embedded text layer from Alza PDFs, preserves the printed final total and rounding, and powers single-file previews and batch imports without OCR. Batch import creates or reuses the Alza supplier contact by IČO and assigns it to each expense.
 - **Services**: `services/` - Business logic:
   - `pdfGenerator.ts` - Invoice PDF generation using **pdfmake** library with Czech formatting, selectable classic/minimalistic templates, QR payment codes (SPAYD), VAT/non-VAT payer support (hides DIČ and shows "Neplátce DPH" for non-VAT payers, hides DPH line when rate is 0%), optional company registry footer text, and simplified layouts for invoices without item units
   - `emailSender.ts` - Per-user SMTP email sending for client invoice delivery and optional separately templated accountant copies

@@ -20,7 +20,16 @@ interface ParsedExpense {
   currency: string;
   amount: number;
   vatRate: number;
+  vatAmount: number;
+  total: number;
   description: string;
+}
+
+interface ExactAmounts {
+  amount: number;
+  vatRate: number;
+  vatAmount: number;
+  total: number;
 }
 
 export default function ExpenseCreate() {
@@ -33,6 +42,7 @@ export default function ExpenseCreate() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [exactAmounts, setExactAmounts] = useState<ExactAmounts | null>(null);
 
   const [formData, setFormData] = useState({
     clientId: '',
@@ -72,6 +82,12 @@ export default function ExpenseCreate() {
           description: expense.description || '',
           notes: expense.notes || '',
         });
+        setExactAmounts({
+          amount: expense.amount,
+          vatRate: expense.vatRate,
+          vatAmount: expense.vatAmount,
+          total: expense.total,
+        });
         if (expense.fileData) {
           setFileData(expense.fileData);
           setFileName(expense.fileName);
@@ -87,6 +103,7 @@ export default function ExpenseCreate() {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
+    if (name === 'amount' || name === 'vatRate') setExactAmounts(null);
     setFormData(prev => ({ ...prev, [name]: value }));
   }
 
@@ -130,6 +147,12 @@ export default function ExpenseCreate() {
           vatRate: parsed.vatRate,
           description: parsed.description,
         }));
+        setExactAmounts({
+          amount: parsed.amount,
+          vatRate: parsed.vatRate,
+          vatAmount: parsed.vatAmount,
+          total: parsed.total,
+        });
         toast.success(t('create.import.success'));
       } catch (err) {
         toast.error(err instanceof Error ? err.message : t('create.import.failed'));
@@ -146,10 +169,16 @@ export default function ExpenseCreate() {
   }
 
   function calculateVatAmount(): number {
+    if (exactAmounts && exactAmounts.amount === Number(formData.amount) && exactAmounts.vatRate === Number(formData.vatRate)) {
+      return exactAmounts.vatAmount;
+    }
     return Number(formData.amount) * (Number(formData.vatRate) / 100);
   }
 
   function calculateTotal(): number {
+    if (exactAmounts && exactAmounts.amount === Number(formData.amount) && exactAmounts.vatRate === Number(formData.vatRate)) {
+      return exactAmounts.total;
+    }
     return Number(formData.amount) + calculateVatAmount();
   }
 
@@ -172,6 +201,7 @@ export default function ExpenseCreate() {
         currency: formData.currency,
         amount: Number(formData.amount),
         vatRate: Number(formData.vatRate),
+        ...(!isEdit && { vatAmount: calculateVatAmount(), total: calculateTotal() }),
         description: formData.description || null,
         notes: formData.notes || null,
         fileData,

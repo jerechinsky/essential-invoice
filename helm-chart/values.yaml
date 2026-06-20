@@ -237,7 +237,7 @@ ingress:
   # -- Ingress annotations (e.g. cert-manager, nginx config)
   annotations: {}
     # cert-manager.io/cluster-issuer: letsencrypt-prod
-    # nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # nginx.ingress.kubernetes.io/proxy-body-size: "55m"  # required for maximum-size batch expense imports
 
   # -- Hostname for the ingress
   host: ""

@@ -33,6 +33,8 @@ describe('Expenses Routes', () => {
     mockParseAlzaInvoice.mockReturnValue({
       supplier: 'Alza.cz a.s.',
       supplierIco: '27082440',
+      supplierDic: 'CZ27082440',
+      supplierAddress: 'Jankovcova 1522/53, 17000 Praha 7',
       supplierInvoiceNumber: '4021043452',
       issueDate: '2026-06-03',
       dueDate: '2026-06-03',
@@ -40,6 +42,7 @@ describe('Expenses Routes', () => {
       amount: 660.33,
       vatRate: 21,
       vatAmount: 138.67,
+      roundingAmount: 0,
       total: 799,
       description: 'Webkamera Logitech HD Webcam C270',
     });
@@ -73,6 +76,8 @@ describe('Expenses Routes', () => {
       expect(response.body.failed).toHaveLength(0);
       expect(response.body.imported[0].supplierInvoiceNumber).toBe('4021043452');
       expect(mockQuery.mock.calls[3][1]).toContain(Buffer.from('%PDF-test').toString('base64'));
+      expect(mockQuery.mock.calls[3][0]).toContain("'paid'");
+      expect(mockQuery.mock.calls[3][0]).toContain('CURRENT_TIMESTAMP');
     });
 
     it('reports duplicate invoices as per-file failures', async () => {
@@ -85,6 +90,31 @@ describe('Expenses Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body.imported).toHaveLength(0);
       expect(response.body.failed[0].error).toContain('already been imported');
+    });
+
+    it('creates and assigns the Alza supplier when no matching IČO exists', async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: [] }) // duplicate check
+        .mockResolvedValueOnce({ rows: [] }) // supplier lookup
+        .mockResolvedValueOnce({ rows: [{ id: 'created-alza-client' }] }) // supplier insert
+        .mockResolvedValueOnce({ rows: [{ count: '0' }] }) // expense number
+        .mockResolvedValueOnce({ rows: [{ id: 'expense-1' }] }); // expense insert
+
+      const response = await request(app)
+        .post('/expenses/import')
+        .attach('files', Buffer.from('%PDF-test'), { filename: 'alza.pdf', contentType: 'application/pdf' });
+
+      expect(response.status).toBe(200);
+      expect(mockQuery.mock.calls[2][0]).toContain('INSERT INTO clients');
+      expect(mockQuery.mock.calls[2][1]).toEqual([
+        'test-user-id',
+        'Alza.cz a.s.',
+        'Jankovcova 1522/53, 17000 Praha 7',
+        '27082440',
+        'CZ27082440',
+        'Automatically created from Alza expense PDF import',
+      ]);
+      expect(mockQuery.mock.calls[4][1]).toContain('created-alza-client');
     });
   });
 
@@ -196,7 +226,7 @@ describe('Expenses Routes', () => {
         rows: [{
           id: 'new-exp',
           expense_number: 'N20260201',
-          status: 'unpaid',
+          status: 'paid',
           total: '1210.00',
         }]
       });
@@ -213,7 +243,9 @@ describe('Expenses Routes', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.expenseNumber).toBe('N20260201');
-      expect(response.body.status).toBe('unpaid');
+      expect(response.body.status).toBe('paid');
+      expect(mockQuery.mock.calls[1][0]).toContain("'paid'");
+      expect(mockQuery.mock.calls[1][0]).toContain('CURRENT_TIMESTAMP');
     });
 
     it('should create expense with client', async () => {
@@ -226,7 +258,7 @@ describe('Expenses Routes', () => {
         rows: [{
           id: 'new-exp',
           expense_number: 'N20260201',
-          status: 'unpaid',
+          status: 'paid',
           total: '1210.00',
         }]
       });
@@ -270,7 +302,7 @@ describe('Expenses Routes', () => {
         rows: [{
           id: 'new-exp',
           expense_number: 'N20260201',
-          status: 'unpaid',
+          status: 'paid',
           total: '1210.00',
         }]
       });
@@ -291,6 +323,28 @@ describe('Expenses Routes', () => {
       expect(params).toContain(210);
       // total should be 1210 (1000 + 210)
       expect(params).toContain(1210);
+    });
+
+    it('should preserve an imported rounded VAT amount and final total', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: '0' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'new-exp', expense_number: 'N20260201', status: 'paid', total: '800.00' }]
+      });
+
+      await request(app)
+        .post('/expenses')
+        .send({
+          issueDate: '2026-02-01',
+          dueDate: '2026-02-01',
+          amount: 660.33,
+          vatRate: 21,
+          vatAmount: 138.67,
+          total: 800,
+        });
+
+      const params = mockQuery.mock.calls[1][1];
+      expect(params).toContain(138.67);
+      expect(params).toContain(800);
     });
   });
 

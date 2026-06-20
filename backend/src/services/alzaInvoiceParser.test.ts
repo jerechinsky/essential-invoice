@@ -17,6 +17,8 @@ describe('Alza invoice parser', () => {
     expect(parseAlzaInvoiceText(alzaText)).toEqual({
       supplier: 'Alza.cz a.s.',
       supplierIco: '27082440',
+      supplierDic: 'CZ27082440',
+      supplierAddress: 'Jankovcova 1522/53, 17000 Praha 7',
       supplierInvoiceNumber: '4021043452',
       issueDate: '2026-06-03',
       dueDate: '2026-06-03',
@@ -24,6 +26,7 @@ describe('Alza invoice parser', () => {
       amount: 660.33,
       vatRate: 21,
       vatAmount: 138.67,
+      roundingAmount: 0,
       total: 799,
       description: 'Webkamera Logitech HD Webcam C270',
     });
@@ -54,6 +57,16 @@ Sazba Základ DPH
       'Datový kabel AlzaPower MagCore 2in1 USB-A to Micro USB/USB-C 15W 1m černý, ' +
       'Nehmotný produkt Doprava - AlzaBox, Nehmotný produkt Sleva na dopravné - AlzaPlus+'
     );
+  });
+
+  it('uses Alza final total including its explicit rounding amount', () => {
+    const roundedText = alzaText
+      .replace('Celkem: 799,00 Kč', 'Celkem: 800,00 Kč')
+      .replace('Sazba Základ DPH', 'Zaokrouhlení: 1,00 Kč\nSazba Základ DPH');
+
+    const parsed = parseAlzaInvoiceText(roundedText);
+    expect(parsed.roundingAmount).toBe(1);
+    expect(parsed.total).toBe(800);
   });
 
   it('extracts positioned text through an embedded ToUnicode map', () => {

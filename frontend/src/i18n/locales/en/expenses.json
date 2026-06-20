@@ -13,6 +13,7 @@
       "failed": "Failed to import: {{count}}",
       "requestFailed": "Invoice import failed",
       "tooMany": "You can import at most 10 PDFs at once",
+      "fileTooLarge": "File {{fileName}} exceeds the 5 MB limit",
       "result": "Files not imported"
     },
     "table": {

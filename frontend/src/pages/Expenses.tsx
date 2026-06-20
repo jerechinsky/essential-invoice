@@ -60,6 +60,11 @@ export default function Expenses() {
       toast.error(t('list.import.tooMany'));
       return;
     }
+    const oversizedFile = files.find(file => file.size > 5 * 1024 * 1024);
+    if (oversizedFile) {
+      toast.error(t('list.import.fileTooLarge', { fileName: oversizedFile.name }));
+      return;
+    }
 
     setImporting(true);
     try {
