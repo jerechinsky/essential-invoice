@@ -737,7 +737,7 @@ interface SendMenuProps {
   variant: 'primary' | 'secondary';
   open: boolean;
   setOpen: (open: boolean) => void;
-  menuRef: React.RefObject<HTMLDivElement>;
+  menuRef: React.RefObject<HTMLDivElement | null>;
   onSendEmail: () => void;
   onDownloadAndMarkSent: () => void;
   t: (key: string) => string;

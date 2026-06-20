@@ -118,7 +118,7 @@ compose=(docker compose --env-file '${APP_ENV_FILE}' -f '${COMPOSE_FILE}' -p '${
 if "\${compose[@]}" ps --status running --services | grep -qx db; then
   mkdir -p backups
   backup_file="backups/essential-invoice-\$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
-  "\${compose[@]}" exec -T db sh -c 'pg_dump -U "\$POSTGRES_USER" "\$POSTGRES_DB"' | gzip -9 > "\${backup_file}"
+  "\${compose[@]}" exec -T db sh -c 'pg_dump -U "\$POSTGRES_USER" "\$POSTGRES_DB"' </dev/null | gzip -9 > "\${backup_file}"
   chmod 600 "\${backup_file}"
   echo "  database backup: \${backup_file}"
 fi
@@ -142,7 +142,7 @@ fi
 
 # Verify the API through the same internal route used by the frontend.
 for attempt in \$(seq 1 30); do
-  if "\${compose[@]}" exec -T frontend wget -qO- http://backend:3001/api/health >/dev/null 2>&1; then
+  if "\${compose[@]}" exec -T frontend wget -qO- http://backend:3001/api/health </dev/null >/dev/null 2>&1; then
     echo "  application is healthy"
     break
   fi
