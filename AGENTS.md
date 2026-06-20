@@ -64,13 +64,14 @@ This is a self-hosted invoicing application for Czech freelancers with frontend/
 - **Routes**: `routes/` - REST endpoints for auth (register, login, forgot-password, reset-password, delete account), clients, invoices, Fakturoid CSV imports, recurring invoices, expenses, payments, settings, ARES lookup, dashboard, AI. The dashboard derives a configurable 1–12 month VAT estimate from issued-invoice VAT minus VAT on paid expenses.
 - **Services**: `services/` - Business logic:
   - `pdfGenerator.ts` - Invoice PDF generation using **pdfmake** library with Czech formatting, QR payment codes (SPAYD), and VAT/non-VAT payer support (hides DIČ and shows "Neplátce DPH" for non-VAT payers, hides DPH line when rate is 0%)
-  - `emailSender.ts` - Per-user SMTP email sending for invoice delivery
+  - `emailSender.ts` - Per-user SMTP email sending for client invoice delivery and optional separately templated accountant copies
   - `globalEmailSender.ts` - Global SMTP email sending for system emails (welcome, password reset), configured via env vars
   - `emailPoller.ts` - IMAP polling for bank payment notifications
   - `recurringInvoiceGenerator.ts` - In-process scheduler for auto-generating invoices from recurring templates (monthly), with optional auto-send
   - `perplexityAI.ts` - Perplexity AI integration for tax advice and financial guidance
   - `cnbExchangeRate.ts` - CNB (Czech National Bank) exchange rate fetching with DB caching and weekend/holiday fallback. Converts EUR invoices to CZK for dashboard totals and paušální daň tracking
   - `fakturoidCsvImport.ts` - Validates and imports Fakturoid invoice CSV exports, reusing or creating contacts and preserving exported totals/statuses
+  - `alzaInvoiceParser.ts` - Dependency-free embedded-text extraction and field mapping for single and batch Alza expense PDF imports
   - `bankParsers/` - Extensible bank email parsing (Air Bank implemented)
 - **i18n**: `i18n/translations.ts` - Plain TypeScript translation maps (cs/en) for PDF labels and email templates. Backend services (pdfGenerator, emailSender, globalEmailSender) use the user's `language` preference to select translations
 - **Utils**: `utils/` - Utility functions:
@@ -81,6 +82,8 @@ This is a self-hosted invoicing application for Czech freelancers with frontend/
 - **Seed**: `db/seed.ts` - Seeds test data (user, clients, invoices, expenses, payments) for development. Run with `bun run seed [email] [password]`
 - **Middleware**: `middleware/auth.ts` - JWT authentication middleware
 - **Database**: PostgreSQL with `pg` driver. Schema managed in `db/init.ts` using idempotent CREATE TABLE IF NOT EXISTS and inline ALTER TABLE migrations (no separate migration files). `db/migrate.ts` is the migration runner script. Users table includes `vat_payer` (BOOLEAN, default false) for VAT payer status, `onboarding_completed` (BOOLEAN, default false) to track new-user onboarding, `language` (VARCHAR(5), default 'cs') for UI/PDF/email language preference, and `pausalni_dan_enabled`/`pausalni_dan_tier`/`pausalni_dan_limit` for paušální daň settings. The settings table stores configurable token-based invoice numbering (`invoice_number_format`), a first-invoice bootstrap sequence (`invoice_number_starting_sequence`), and an independent monthly/yearly reset policy (`invoice_number_reset_period`). `password_reset_tokens` table stores hashed tokens for password reset flow. `recurring_invoices` and `recurring_invoice_items` tables store monthly recurring invoice templates; `invoices.recurring_invoice_id` tracks which invoices were auto-generated from templates. Invoices table includes `exchange_rate` (DECIMAL) and `total_czk` (DECIMAL) for EUR→CZK conversion at CNB rates. `exchange_rates` table caches fetched CNB rates by date and currency.
+
+Invoices track accountant forwarding with `accountant_email_sent_at` and `accountant_email_sent_to`. Settings store `accountant_email`, `accountant_email_template`, and `accountant_send_default`; recurring auto-send honors the default when forwarding to the accountant.
 
 ### Frontend (`frontend/src/`)
 - **React 18** with TypeScript, Vite, and TailwindCSS

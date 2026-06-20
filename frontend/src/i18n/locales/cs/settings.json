@@ -76,8 +76,19 @@
 
   "emailTemplate": {
     "heading": "Šablona emailu",
-    "variablesHelp": "Použijte proměnné: {{invoiceNumber}}, {{total}}, {{dueDate}}, {{clientName}}, {{senderName}}",
+    "variablesHelp": "Použijte proměnné: {{invoiceNumber}}, {{total}}, {{issueDate}}, {{dueDate}}, {{clientName}}, {{senderName}}",
     "placeholder": "Dobrý den,\n\nv příloze Vám zasílám fakturu č. {{invoiceNumber}} na částku {{total}}.\n\nDatum splatnosti: {{dueDate}}\n\nDěkuji za spolupráci.\n\nS pozdravem,\n{{senderName}}"
+  },
+
+  "accountant": {
+    "heading": "Předávání účetnímu",
+    "description": "Při odesílání faktury můžete přiložit kopii pro účetní. Kopie má v dialogu vlastní upravitelnou zprávu.",
+    "email": "E-mail účetního",
+    "emailPlaceholder": "ucetni@example.com",
+    "sendDefault": "Ve výchozím nastavení zaškrtnout „Odeslat účetnímu“",
+    "template": "Šablona e-mailu pro účetní",
+    "variablesHelp": "Použijte proměnné: {{invoiceNumber}}, {{total}}, {{issueDate}}, {{dueDate}}, {{clientName}}, {{senderName}}",
+    "templatePlaceholder": "Dobrý den,\n\nv příloze zasílám fakturu č. {{invoiceNumber}}, vystavenou dne {{issueDate}} pro společnost {{clientName}}, na částku {{total}}.\n\nDatum splatnosti: {{dueDate}}\n\nS pozdravem,\n{{senderName}}"
   },
 
   "toast": {

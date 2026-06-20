@@ -55,6 +55,9 @@ const defaultSettings = {
   defaultVatRate: 21,
   defaultPaymentTerms: 14,
   emailTemplate: null,
+  accountantEmail: null,
+  accountantEmailTemplate: null,
+  accountantSendDefault: false,
   calculatorEnabled: false,
   perplexityApiKeySet: false
 };
@@ -170,6 +173,7 @@ describe('Settings Component', () => {
     fireEvent.change(getInvoiceNumberFormatInput(), { target: { value: '{YY}/{SEQ3}' } });
     fireEvent.change(getStartingSequenceInput(), { target: { value: '8' } });
     fireEvent.change(getResetPeriodSelect(), { target: { value: 'monthly' } });
+
     fireEvent.click(screen.getByRole('button', { name: /uložit nastavení/i }));
 
     await waitFor(() => {
@@ -177,6 +181,33 @@ describe('Settings Component', () => {
         invoiceNumberFormat: '{YY}/{SEQ3}',
         invoiceNumberStartingSequence: 8,
         invoiceNumberResetPeriod: 'monthly'
+      }));
+    });
+  });
+
+  it('loads and saves accountant forwarding preferences', async () => {
+    mockGet.mockResolvedValueOnce({
+      ...defaultSettings,
+      accountantEmail: 'accountant@example.com',
+      accountantEmailTemplate: 'Invoice {{invoiceNumber}} for {{clientName}}',
+      accountantSendDefault: true
+    });
+    mockPut.mockResolvedValueOnce({ message: 'Settings updated successfully' });
+    mockGet.mockResolvedValueOnce(defaultSettings);
+
+    render(<Settings />);
+
+    const email = await screen.findByDisplayValue('accountant@example.com');
+    expect(email).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Invoice {{invoiceNumber}} for {{clientName}}')).toBeInTheDocument();
+    expect(document.querySelector('input[name="accountantSendDefault"]')).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: /uložit nastavení/i }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith('/settings', expect.objectContaining({
+        accountantEmail: 'accountant@example.com',
+        accountantEmailTemplate: 'Invoice {{invoiceNumber}} for {{clientName}}',
+        accountantSendDefault: true
       }));
     });
   });

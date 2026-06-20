@@ -2,8 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the database query function
 const mockQuery = vi.fn();
+const mockParseAlzaInvoice = vi.fn();
 vi.mock('../db/init.js', () => ({
   query: (...args: unknown[]) => mockQuery(...args)
+}));
+vi.mock('../services/alzaInvoiceParser.js', () => ({
+  parseAlzaInvoice: (...args: unknown[]) => mockParseAlzaInvoice(...args)
 }));
 
 // Import after mocking
@@ -26,6 +30,62 @@ app.use('/expenses', expenseRouter);
 describe('Expenses Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockParseAlzaInvoice.mockReturnValue({
+      supplier: 'Alza.cz a.s.',
+      supplierIco: '27082440',
+      supplierInvoiceNumber: '4021043452',
+      issueDate: '2026-06-03',
+      dueDate: '2026-06-03',
+      currency: 'CZK',
+      amount: 660.33,
+      vatRate: 21,
+      vatAmount: 138.67,
+      total: 799,
+      description: 'Webkamera Logitech HD Webcam C270',
+    });
+  });
+
+  describe('Alza PDF import', () => {
+    it('previews a single invoice without saving it', async () => {
+      const response = await request(app)
+        .post('/expenses/import/preview')
+        .attach('file', Buffer.from('%PDF-test'), { filename: 'alza.pdf', contentType: 'application/pdf' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.amount).toBe(660.33);
+      expect(response.body.description).toBe('Webkamera Logitech HD Webcam C270');
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
+    it('imports a batch and attaches each source PDF', async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: [] }) // duplicate check
+        .mockResolvedValueOnce({ rows: [{ id: 'alza-client' }] }) // supplier match
+        .mockResolvedValueOnce({ rows: [{ count: '0' }] }) // expense number
+        .mockResolvedValueOnce({ rows: [{ id: 'expense-1' }] }); // insert
+
+      const response = await request(app)
+        .post('/expenses/import')
+        .attach('files', Buffer.from('%PDF-test'), { filename: 'alza.pdf', contentType: 'application/pdf' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.imported).toHaveLength(1);
+      expect(response.body.failed).toHaveLength(0);
+      expect(response.body.imported[0].supplierInvoiceNumber).toBe('4021043452');
+      expect(mockQuery.mock.calls[3][1]).toContain(Buffer.from('%PDF-test').toString('base64'));
+    });
+
+    it('reports duplicate invoices as per-file failures', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: 'already-imported' }] });
+
+      const response = await request(app)
+        .post('/expenses/import')
+        .attach('files', Buffer.from('%PDF-test'), { filename: 'duplicate.pdf', contentType: 'application/pdf' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.imported).toHaveLength(0);
+      expect(response.body.failed[0].error).toContain('already been imported');
+    });
   });
 
   describe('GET /expenses', () => {

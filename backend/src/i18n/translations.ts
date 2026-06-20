@@ -35,6 +35,8 @@ interface PdfTranslations {
 interface EmailTranslations {
   invoiceSubject: string;
   defaultTemplate: string;
+  accountantInvoiceSubject: string;
+  defaultAccountantTemplate: string;
   supplierFallback: string;
   welcomeSubject: string;
   welcomeText: (userName: string) => string;
@@ -91,6 +93,15 @@ v příloze Vám zasílám fakturu č. {{invoiceNumber}} na částku {{total}}.
 Datum splatnosti: {{dueDate}}
 
 Děkuji za spolupráci.
+
+S pozdravem,
+{{senderName}}`,
+      accountantInvoiceSubject: 'Faktura č. {{number}} – {{clientName}}',
+      defaultAccountantTemplate: `Dobrý den,
+
+v příloze zasílám fakturu č. {{invoiceNumber}}, vystavenou dne {{issueDate}} pro společnost {{clientName}}, na částku {{total}}.
+
+Datum splatnosti: {{dueDate}}
 
 S pozdravem,
 {{senderName}}`,
@@ -169,6 +180,15 @@ please find attached invoice No. {{invoiceNumber}} for the amount of {{total}}.
 Due date: {{dueDate}}
 
 Thank you for your cooperation.
+
+Best regards,
+{{senderName}}`,
+      accountantInvoiceSubject: 'Invoice No. {{number}} – {{clientName}}',
+      defaultAccountantTemplate: `Hello,
+
+please find attached invoice No. {{invoiceNumber}}, issued on {{issueDate}} to {{clientName}}, for {{total}}.
+
+Due date: {{dueDate}}
 
 Best regards,
 {{senderName}}`,

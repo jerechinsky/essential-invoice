@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../utils/api';
 import { formatCurrency, formatDate, getStatusLabel, getStatusColor } from '../utils/format';
-import { Plus, Search, Filter, FileText, Download, Upload, X, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Filter, FileText, Download, Upload, X, AlertTriangle, CheckCircle, MinusCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import RecurringInvoices from './RecurringInvoices';
 
@@ -19,6 +19,7 @@ interface Invoice {
   issueDate: string;
   dueDate: string;
   total: number;
+  accountantEmailSentAt: string | null;
   createdAt: string;
 }
 
@@ -245,6 +246,7 @@ export default function Invoices() {
                         <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnDueDate')}</th>
                         <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnAmount')}</th>
                         <th className="text-center py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnStatus')}</th>
+                        <th className="text-center py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnAccountant')}</th>
                         <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnActions')}</th>
                       </tr>
                     </thead>
@@ -276,6 +278,22 @@ export default function Invoices() {
                             <span className={`badge ${getStatusColor(invoice.status)}`}>
                               {getStatusLabel(invoice.status)}
                             </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {invoice.accountantEmailSentAt ? (
+                              <span
+                                className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400"
+                                title={formatDate(invoice.accountantEmailSentAt)}
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                                {t('list.accountantSent')}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-sm text-gray-400 dark:text-gray-500">
+                                <MinusCircle className="h-4 w-4" />
+                                {t('list.accountantNotSent')}
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-right">
                             <button

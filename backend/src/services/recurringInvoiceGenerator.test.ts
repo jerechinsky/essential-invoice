@@ -186,7 +186,7 @@ describe('Recurring Invoice Generator', () => {
     mockQuery.mockResolvedValueOnce({ rows: [] }); // update next_gen
     // Mock client email lookup
     mockQuery.mockResolvedValueOnce({
-      rows: [{ primary_email: 'client@test.cz', secondary_email: null }]
+      rows: [{ primary_email: 'client@test.cz', secondary_email: null, accountant_send_default: true }]
     });
     // Mock status update after send
     mockQuery.mockResolvedValueOnce({ rows: [] });
@@ -194,7 +194,14 @@ describe('Recurring Invoice Generator', () => {
     const result = await generateInvoiceFromRecurring(autoSendTemplate);
 
     expect(result.success).toBe(true);
-    expect(sendInvoiceEmail).toHaveBeenCalledWith('inv-1', 'user-1', 'client@test.cz', null);
+    expect(sendInvoiceEmail).toHaveBeenCalledWith(
+      'inv-1',
+      'user-1',
+      'client@test.cz',
+      null,
+      undefined,
+      true
+    );
 
     // Verify invoice status was updated to 'sent' (index shifted +1)
     const statusUpdateSql = mockQuery.mock.calls[7][0];

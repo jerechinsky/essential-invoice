@@ -76,8 +76,19 @@
 
   "emailTemplate": {
     "heading": "Email Template",
-    "variablesHelp": "Use variables: {{invoiceNumber}}, {{total}}, {{dueDate}}, {{clientName}}, {{senderName}}",
+    "variablesHelp": "Use variables: {{invoiceNumber}}, {{total}}, {{issueDate}}, {{dueDate}}, {{clientName}}, {{senderName}}",
     "placeholder": "Hello,\n\nPlease find attached invoice #{{invoiceNumber}} for {{total}}.\n\nDue date: {{dueDate}}\n\nThank you for your cooperation.\n\nBest regards,\n{{senderName}}"
+  },
+
+  "accountant": {
+    "heading": "Accountant forwarding",
+    "description": "Attach an accountant copy when sending invoices. The copy has its own editable message in the send dialog.",
+    "email": "Accountant email",
+    "emailPlaceholder": "accountant@example.com",
+    "sendDefault": "Keep “Send to accountant” checked by default",
+    "template": "Accountant email template",
+    "variablesHelp": "Use variables: {{invoiceNumber}}, {{total}}, {{issueDate}}, {{dueDate}}, {{clientName}}, {{senderName}}",
+    "templatePlaceholder": "Hello,\n\nPlease find attached invoice No. {{invoiceNumber}}, issued on {{issueDate}} to {{clientName}}, for {{total}}.\n\nDue date: {{dueDate}}\n\nBest regards,\n{{senderName}}"
   },
 
   "toast": {

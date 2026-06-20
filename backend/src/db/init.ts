@@ -78,6 +78,8 @@ export async function initializeDatabase() {
         paid_at TIMESTAMP,
         primary_email_sent_at TIMESTAMP,
         secondary_email_sent_at TIMESTAMP,
+        accountant_email_sent_at TIMESTAMP,
+        accountant_email_sent_to VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT invoices_user_invoice_number_key UNIQUE (user_id, invoice_number)
@@ -156,6 +158,9 @@ export async function initializeDatabase() {
         default_vat_rate DECIMAL(5, 2) DEFAULT 21,
         default_payment_terms INTEGER DEFAULT 14,
         email_template TEXT,
+        accountant_email VARCHAR(255),
+        accountant_email_template TEXT,
+        accountant_send_default BOOLEAN DEFAULT false,
         calculator_enabled BOOLEAN DEFAULT false,
         ai_enabled BOOLEAN DEFAULT true,
         perplexity_api_key TEXT,
@@ -361,6 +366,41 @@ export async function initializeDatabase() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_import_source_external_id
         ON invoices(user_id, import_source, external_id)
         WHERE external_id IS NOT NULL;
+
+      -- Add accountant forwarding settings and per-invoice delivery tracking
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'settings' AND column_name = 'accountant_email'
+        ) THEN
+          ALTER TABLE settings ADD COLUMN accountant_email VARCHAR(255);
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'settings' AND column_name = 'accountant_email_template'
+        ) THEN
+          ALTER TABLE settings ADD COLUMN accountant_email_template TEXT;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'settings' AND column_name = 'accountant_send_default'
+        ) THEN
+          ALTER TABLE settings ADD COLUMN accountant_send_default BOOLEAN DEFAULT false;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'invoices' AND column_name = 'accountant_email_sent_at'
+        ) THEN
+          ALTER TABLE invoices ADD COLUMN accountant_email_sent_at TIMESTAMP;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'invoices' AND column_name = 'accountant_email_sent_to'
+        ) THEN
+          ALTER TABLE invoices ADD COLUMN accountant_email_sent_to VARCHAR(255);
+        END IF;
+      END $$;
 
       -- Exchange rates cache table
       CREATE TABLE IF NOT EXISTS exchange_rates (

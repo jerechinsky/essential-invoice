@@ -35,11 +35,11 @@ The profile payload includes company invoicing fields such as `companyName`, `co
 - `POST /api/invoices` - Create invoice
 - `PUT /api/invoices/:id` - Update invoice
 - `DELETE /api/invoices/:id` - Delete draft invoice
-- `POST /api/invoices/:id/send` - Send via email
+- `POST /api/invoices/:id/send` - Send via email. Optional body fields `sendToAccountant` and `accountantMessage` send a separately templated copy to the configured accountant. The response includes `accountantSent` and an optional `accountantError`; client delivery remains successful if only the accountant copy fails.
 - `POST /api/invoices/:id/mark-sent` - Mark as sent manually (without sending email)
 - `POST /api/invoices/:id/mark-paid` - Mark as paid
 - `POST /api/invoices/:id/cancel` - Cancel invoice
-- `GET /api/invoices/:id/preview` - Preview invoice email before sending
+- `GET /api/invoices/:id/preview` - Preview the client and accountant email content before sending. The `accountant` object includes the configured email, rendered subject/body, default checkbox state, and previous delivery details.
 
 EUR invoices include `exchangeRate` (CNB rate at issue date) and `totalCzk` (converted CZK equivalent) in responses. These are auto-fetched from the Czech National Bank when the invoice is created or updated. Dashboard totals and paušální daň tracking use the CZK equivalent for EUR invoices.
 
@@ -68,6 +68,8 @@ Both endpoints accept JSON in the form `{ "csv": "..." }`. Imports are limited t
 - `GET /api/expenses/:id` - Get expense details
 - `GET /api/expenses/:id/file` - Download attached file
 - `POST /api/expenses` - Create expense with optional file upload
+- `POST /api/expenses/import/preview` - Parse one Alza PDF and return expense fields without saving (`multipart/form-data`, field `file`)
+- `POST /api/expenses/import` - Parse and create up to 10 Alza expenses independently (`multipart/form-data`, repeated field `files`)
 - `PUT /api/expenses/:id` - Update expense
 - `DELETE /api/expenses/:id` - Delete expense
 - `POST /api/expenses/:id/mark-paid` - Mark as paid
@@ -97,7 +99,7 @@ Both endpoints accept JSON in the form `{ "csv": "..." }`. Imports are limited t
 ## Settings
 
 - `GET /api/settings` - Get user settings
-- `PUT /api/settings` - Update settings
+- `PUT /api/settings` - Update settings, including `accountantEmail`, `accountantEmailTemplate`, and `accountantSendDefault`
 - `POST /api/settings/test-smtp` - Test SMTP connection
 - `POST /api/settings/test-imap` - Test IMAP connection
 

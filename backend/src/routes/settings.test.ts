@@ -84,6 +84,24 @@ describe('Settings Routes', () => {
       expect(values).toContain('INV');
     });
 
+    it('should update accountant forwarding settings', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: '1' }] });
+
+      const response = await request(app).put('/settings').send({
+        accountantEmail: ' accountant@example.com ',
+        accountantEmailTemplate: 'Invoice {{invoiceNumber}} for {{clientName}}',
+        accountantSendDefault: true
+      });
+
+      expect(response.status).toBe(200);
+      const [sql, values] = mockQuery.mock.calls[0];
+      expect(sql).toContain('accountant_email');
+      expect(sql).toContain('accountant_email_template');
+      expect(sql).toContain('accountant_send_default');
+      expect(values).toContain('accountant@example.com');
+      expect(values).toContain(true);
+    });
+
     it('should encrypt secrets before storing', async () => {
       mockQuery.mockResolvedValueOnce({
         rows: [{ id: '1' }]
@@ -202,6 +220,7 @@ describe('Settings Routes', () => {
       expect(response.body.invoiceNumberFormat).toBe('{YYYY}{MM}{SEQ2}');
       expect(response.body.invoiceNumberStartingSequence).toBe(7);
       expect(response.body.invoiceNumberResetPeriod).toBe('yearly');
+      expect(response.body.accountantSendDefault).toBe(false);
     });
 
     it('should not return paušální daň fields', async () => {
@@ -259,6 +278,8 @@ describe('Settings Routes', () => {
       expect(response.body.invoiceNumberStartingSequence).toBe(1);
       expect(response.body.invoiceNumberResetPeriod).toBe('monthly');
       expect(response.body.invoicePdfTemplate).toBe('classic');
+      expect(response.body.accountantEmail).toBeNull();
+      expect(response.body.accountantSendDefault).toBe(false);
       // Should not include paušální daň fields even in defaults
       expect(response.body.pausalniDanEnabled).toBeUndefined();
       expect(response.body.pausalniDanTier).toBeUndefined();

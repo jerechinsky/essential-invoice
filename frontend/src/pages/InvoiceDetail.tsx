@@ -48,6 +48,8 @@ interface Invoice {
   total: number;
   notes: string;
   sentAt: string | null;
+  accountantEmailSentAt: string | null;
+  accountantEmailSentTo: string | null;
   paidAt: string | null;
   exchangeRate: number | null;
   totalCzk: number | null;
@@ -62,6 +64,7 @@ export default function InvoiceDetail() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [sendToSecondary, setSendToSecondary] = useState(false);
+  const [sendToAccountant, setSendToAccountant] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewData, setPreviewData] = useState<{
@@ -69,8 +72,17 @@ export default function InvoiceDetail() {
     emailBody: string;
     pdfBase64: string;
     recipients: { primary: string; secondary: string | null };
+    accountant: {
+      email: string | null;
+      subject: string;
+      emailBody: string;
+      sendByDefault: boolean;
+      sentAt: string | null;
+      sentTo: string | null;
+    };
   } | null>(null);
   const [customMessage, setCustomMessage] = useState('');
+  const [accountantMessage, setAccountantMessage] = useState('');
   const [secondaryEmail, setSecondaryEmail] = useState('');
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
   const [paidDate, setPaidDate] = useState('');
@@ -106,6 +118,8 @@ export default function InvoiceDetail() {
       setCustomMessage(result.emailBody);
       setSecondaryEmail(result.recipients.secondary || '');
       setSendToSecondary(!!result.recipients.secondary);
+      setAccountantMessage(result.accountant.emailBody);
+      setSendToAccountant(result.accountant.sendByDefault);
     } catch (error) {
       console.error('Failed to load preview:', error);
       toast.error(t('detail.previewError'));
@@ -157,12 +171,20 @@ export default function InvoiceDetail() {
   async function handleSendInvoice() {
     setSending(true);
     try {
-      await api.post(`/invoices/${id}/send`, {
+      const result = await api.post(`/invoices/${id}/send`, {
         sendToSecondary: sendToSecondary && secondaryEmail.trim() !== '',
         secondaryEmail: sendToSecondary && secondaryEmail.trim() !== '' ? secondaryEmail.trim() : undefined,
-        customMessage: customMessage !== previewData?.emailBody ? customMessage : undefined
+        customMessage: customMessage !== previewData?.emailBody ? customMessage : undefined,
+        sendToAccountant,
+        accountantMessage: sendToAccountant && accountantMessage !== previewData?.accountant.emailBody
+          ? accountantMessage
+          : undefined
       });
-      toast.success(t('detail.sendSuccess'));
+      if (sendToAccountant && !result.accountantSent) {
+        toast.warning(t('detail.accountantSendError'));
+      } else {
+        toast.success(t('detail.sendSuccess'));
+      }
       setShowSendModal(false);
       setPreviewData(null);
       loadInvoice();
@@ -389,6 +411,17 @@ export default function InvoiceDetail() {
                   <dd className="font-medium">{formatDate(invoice.sentAt)}</dd>
                 </div>
               )}
+              <div className="flex justify-between gap-4">
+                <dt className="text-gray-500 dark:text-gray-400">{t('detail.accountantDelivery')}</dt>
+                <dd className={`font-medium text-right ${invoice.accountantEmailSentAt ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {invoice.accountantEmailSentAt
+                    ? t('detail.accountantSent', {
+                        date: formatDate(invoice.accountantEmailSentAt),
+                        email: invoice.accountantEmailSentTo || ''
+                      })
+                    : t('detail.accountantNotSent')}
+                </dd>
+              </div>
               {invoice.paidAt && (
                 <div className="flex justify-between">
                   <dt className="text-gray-500 dark:text-gray-400">{t('detail.paidAt')}</dt>
@@ -537,6 +570,70 @@ export default function InvoiceDetail() {
                       className="input flex-1 min-h-[200px] resize-none"
                       placeholder={t('detail.sendModal.messagePlaceholder')}
                     />
+                  </div>
+
+                  {/* Accountant copy */}
+                  <div className="mb-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {t('detail.sendModal.accountantCopy')}
+                      </h3>
+                      <label className={`flex items-center space-x-2 ${previewData.accountant.email ? '' : 'opacity-50'}`}>
+                        <input
+                          type="checkbox"
+                          checked={sendToAccountant}
+                          onChange={(e) => setSendToAccountant(e.target.checked)}
+                          disabled={!previewData.accountant.email}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {t('detail.sendModal.sendToAccountant')}
+                        </span>
+                      </label>
+                    </div>
+                    {previewData.accountant.email ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
+                            {t('detail.sendModal.accountantEmail')}
+                          </label>
+                          <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300">
+                            {previewData.accountant.email}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
+                            {t('detail.sendModal.accountantSubject')}
+                          </label>
+                          <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300">
+                            {previewData.accountant.subject}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
+                            {t('detail.sendModal.accountantMessage')}
+                          </label>
+                          <textarea
+                            value={accountantMessage}
+                            onChange={(e) => setAccountantMessage(e.target.value)}
+                            className="input min-h-[160px] resize-y"
+                            disabled={!sendToAccountant}
+                          />
+                        </div>
+                        {previewData.accountant.sentAt && (
+                          <p className="text-xs text-green-600 dark:text-green-400">
+                            {t('detail.sendModal.accountantPreviouslySent', {
+                              date: formatDate(previewData.accountant.sentAt),
+                              email: previewData.accountant.sentTo || ''
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-amber-600 dark:text-amber-400">
+                        {t('detail.sendModal.accountantNotConfigured')}
+                      </p>
+                    )}
                   </div>
 
                   {/* Actions */}

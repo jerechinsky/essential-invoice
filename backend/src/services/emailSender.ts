@@ -7,7 +7,26 @@ import { t, formatDateLocale, formatCurrencyLocale } from '../i18n/translations'
 interface SendResult {
   success: boolean;
   sentTo?: string[];
+  accountantSent?: boolean;
+  accountantEmail?: string;
+  accountantError?: string;
   error?: string;
+}
+
+function renderTemplate(
+  template: string,
+  invoice: any,
+  settings: any,
+  language: string,
+  supplierFallback: string
+): string {
+  return template
+    .replace(/\{\{invoiceNumber\}\}/g, invoice.invoice_number)
+    .replace(/\{\{total\}\}/g, formatCurrencyLocale(parseFloat(invoice.total), invoice.currency, language))
+    .replace(/\{\{issueDate\}\}/g, formatDateLocale(invoice.issue_date, language))
+    .replace(/\{\{dueDate\}\}/g, formatDateLocale(invoice.due_date, language))
+    .replace(/\{\{clientName\}\}/g, invoice.client_name)
+    .replace(/\{\{senderName\}\}/g, settings.smtp_from_name || supplierFallback);
 }
 
 export async function sendInvoiceEmail(
@@ -15,12 +34,17 @@ export async function sendInvoiceEmail(
   userId: string,
   primaryEmail: string,
   secondaryEmail: string | null,
-  customMessage?: string
+  customMessage?: string,
+  sendToAccountant: boolean = false,
+  accountantMessage?: string
 ): Promise<SendResult> {
   try {
     // Get user settings
     const settingsResult = await query(
-      'SELECT smtp_host, smtp_port, smtp_user, smtp_password, smtp_secure, smtp_from_email, smtp_from_name, email_template FROM settings WHERE user_id = $1',
+      `SELECT smtp_host, smtp_port, smtp_user, smtp_password, smtp_secure,
+              smtp_from_email, smtp_from_name, email_template, accountant_email,
+              accountant_email_template
+       FROM settings WHERE user_id = $1`,
       [userId]
     );
 
@@ -37,7 +61,8 @@ export async function sendInvoiceEmail(
 
     // Get invoice details
     const invoiceResult = await query(
-      `SELECT i.invoice_number, i.total, i.currency, i.due_date, c.company_name as client_name
+      `SELECT i.invoice_number, i.total, i.currency, i.issue_date, i.due_date,
+              c.company_name as client_name
        FROM invoices i
        JOIN clients c ON i.client_id = c.id
        WHERE i.id = $1`,
@@ -66,12 +91,7 @@ export async function sendInvoiceEmail(
 
     // Build email content
     const template = customMessage || settings.email_template || tr.defaultTemplate;
-    const emailBody = template
-      .replace(/\{\{invoiceNumber\}\}/g, invoice.invoice_number)
-      .replace(/\{\{total\}\}/g, formatCurrencyLocale(parseFloat(invoice.total), invoice.currency, language))
-      .replace(/\{\{dueDate\}\}/g, formatDateLocale(invoice.due_date, language))
-      .replace(/\{\{clientName\}\}/g, invoice.client_name)
-      .replace(/\{\{senderName\}\}/g, settings.smtp_from_name || tr.supplierFallback);
+    const emailBody = renderTemplate(template, invoice, settings, language, tr.supplierFallback);
 
     const subject = tr.invoiceSubject.replace('{{number}}', invoice.invoice_number);
     const sentTo: string[] = [];
@@ -128,7 +148,75 @@ export async function sendInvoiceEmail(
       );
     }
 
-    return { success: true, sentTo };
+    let accountantSent = false;
+    let accountantError: string | undefined;
+
+    if (sendToAccountant && settings.accountant_email) {
+      const accountantTemplate = accountantMessage
+        || settings.accountant_email_template
+        || tr.defaultAccountantTemplate;
+      const accountantBody = renderTemplate(
+        accountantTemplate,
+        invoice,
+        settings,
+        language,
+        tr.supplierFallback
+      );
+      const accountantSubject = tr.accountantInvoiceSubject
+        .replace('{{number}}', invoice.invoice_number)
+        .replace('{{clientName}}', invoice.client_name);
+
+      try {
+        await transporter.sendMail({
+          from: settings.smtp_from_name
+            ? `"${settings.smtp_from_name}" <${settings.smtp_from_email}>`
+            : settings.smtp_from_email,
+          to: settings.accountant_email,
+          subject: accountantSubject,
+          text: accountantBody,
+          attachments: [
+            {
+              filename: `${invoice.invoice_number}.pdf`,
+              content: pdfBuffer,
+              contentType: 'application/pdf'
+            }
+          ]
+        });
+        sentTo.push(settings.accountant_email);
+        accountantSent = true;
+      } catch (error: any) {
+        accountantError = error.message;
+        try {
+          await query(
+            `INSERT INTO email_logs (user_id, invoice_id, email_type, recipient_email, subject, status, error_message)
+             VALUES ($1, $2, 'invoice_sent', $3, $4, 'failed', $5)`,
+            [userId, invoiceId, settings.accountant_email, accountantSubject, accountantError]
+          );
+        } catch (logError) {
+          console.error('Failed to log accountant email error:', logError);
+        }
+      }
+
+      if (accountantSent) {
+        try {
+          await query(
+            `INSERT INTO email_logs (user_id, invoice_id, email_type, recipient_email, subject, status, sent_at)
+             VALUES ($1, $2, 'invoice_sent', $3, $4, 'sent', CURRENT_TIMESTAMP)`,
+            [userId, invoiceId, settings.accountant_email, accountantSubject]
+          );
+        } catch (logError) {
+          console.error('Failed to log accountant email:', logError);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      sentTo,
+      accountantSent,
+      accountantEmail: accountantSent ? settings.accountant_email : undefined,
+      accountantError
+    };
   } catch (error: any) {
     console.error('Send email error:', error);
 

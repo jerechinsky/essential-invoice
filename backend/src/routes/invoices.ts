@@ -163,6 +163,8 @@ invoiceRouter.get('/', async (req: AuthRequest, res: Response) => {
       total: parseFloat(row.total),
       notes: row.notes,
       sentAt: row.sent_at,
+      accountantEmailSentAt: row.accountant_email_sent_at,
+      accountantEmailSentTo: row.accountant_email_sent_to,
       paidAt: row.paid_at,
       recurringInvoiceId: row.recurring_invoice_id,
       exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : null,
@@ -229,6 +231,8 @@ invoiceRouter.get('/:id', async (req: AuthRequest, res: Response) => {
       paidAt: row.paid_at,
       primaryEmailSentAt: row.primary_email_sent_at,
       secondaryEmailSentAt: row.secondary_email_sent_at,
+      accountantEmailSentAt: row.accountant_email_sent_at,
+      accountantEmailSentTo: row.accountant_email_sent_to,
       exchangeRate: row.exchange_rate ? parseFloat(row.exchange_rate) : null,
       totalCzk: row.total_czk ? parseFloat(row.total_czk) : null,
       createdAt: row.created_at,
@@ -560,8 +564,10 @@ invoiceRouter.get('/:id/preview', async (req: AuthRequest, res: Response) => {
   try {
     // Get invoice with client details
     const invoiceResult = await query(
-      `SELECT i.invoice_number, i.total, i.currency, i.due_date, i.status,
-              c.company_name as client_name, c.primary_email, c.secondary_email
+      `SELECT i.invoice_number, i.total, i.currency, i.issue_date, i.due_date, i.status,
+              i.accountant_email_sent_at, i.accountant_email_sent_to,
+              c.company_name as client_name,
+              c.primary_email, c.secondary_email
        FROM invoices i
        JOIN clients c ON i.client_id = c.id
        WHERE i.id = $1 AND i.user_id = $2`,
@@ -580,7 +586,9 @@ invoiceRouter.get('/:id/preview', async (req: AuthRequest, res: Response) => {
 
     // Get user settings for email template
     const settingsResult = await query(
-      'SELECT smtp_from_name, email_template FROM settings WHERE user_id = $1',
+      `SELECT smtp_from_name, email_template, accountant_email,
+              accountant_email_template, accountant_send_default
+       FROM settings WHERE user_id = $1`,
       [req.userId]
     );
 
@@ -595,11 +603,23 @@ invoiceRouter.get('/:id/preview', async (req: AuthRequest, res: Response) => {
     const emailBody = template
       .replace(/\{\{invoiceNumber\}\}/g, invoice.invoice_number)
       .replace(/\{\{total\}\}/g, formatCurrencyLocale(parseFloat(invoice.total), invoice.currency, language))
+      .replace(/\{\{issueDate\}\}/g, formatDateLocale(invoice.issue_date, language))
       .replace(/\{\{dueDate\}\}/g, formatDateLocale(invoice.due_date, language))
       .replace(/\{\{clientName\}\}/g, invoice.client_name)
       .replace(/\{\{senderName\}\}/g, settings.smtp_from_name || tr.supplierFallback);
 
     const subject = tr.invoiceSubject.replace('{{number}}', invoice.invoice_number);
+    const accountantTemplate = settings.accountant_email_template || tr.defaultAccountantTemplate;
+    const accountantEmailBody = accountantTemplate
+      .replace(/\{\{invoiceNumber\}\}/g, invoice.invoice_number)
+      .replace(/\{\{total\}\}/g, formatCurrencyLocale(parseFloat(invoice.total), invoice.currency, language))
+      .replace(/\{\{issueDate\}\}/g, formatDateLocale(invoice.issue_date, language))
+      .replace(/\{\{dueDate\}\}/g, formatDateLocale(invoice.due_date, language))
+      .replace(/\{\{clientName\}\}/g, invoice.client_name)
+      .replace(/\{\{senderName\}\}/g, settings.smtp_from_name || tr.supplierFallback);
+    const accountantSubject = tr.accountantInvoiceSubject
+      .replace('{{number}}', invoice.invoice_number)
+      .replace('{{clientName}}', invoice.client_name);
 
     // Generate PDF as base64
     const pdfBuffer = await generateInvoicePDF(req.params.id as string, req.userId!);
@@ -612,6 +632,14 @@ invoiceRouter.get('/:id/preview', async (req: AuthRequest, res: Response) => {
       recipients: {
         primary: invoice.primary_email,
         secondary: invoice.secondary_email
+      },
+      accountant: {
+        email: settings.accountant_email || null,
+        subject: accountantSubject,
+        emailBody: accountantEmailBody,
+        sendByDefault: !!settings.accountant_email && (settings.accountant_send_default ?? false),
+        sentAt: invoice.accountant_email_sent_at,
+        sentTo: invoice.accountant_email_sent_to
       }
     });
   } catch (error) {
@@ -622,9 +650,22 @@ invoiceRouter.get('/:id/preview', async (req: AuthRequest, res: Response) => {
 
 // Send invoice via email
 invoiceRouter.post('/:id/send', async (req: AuthRequest, res: Response) => {
-  const { sendToSecondary = false, secondaryEmail, customMessage } = req.body;
+  const {
+    sendToSecondary = false,
+    secondaryEmail,
+    customMessage,
+    sendToAccountant = false,
+    accountantMessage
+  } = req.body;
 
   try {
+    if (customMessage !== undefined && typeof customMessage !== 'string') {
+      return res.status(400).json({ error: 'customMessage must be a string' });
+    }
+    if (accountantMessage !== undefined && typeof accountantMessage !== 'string') {
+      return res.status(400).json({ error: 'accountantMessage must be a string' });
+    }
+
     // Check invoice exists and is not draft
     const invoiceCheck = await query(
       `SELECT i.*, c.primary_email, c.secondary_email, c.company_name as client_name
@@ -649,13 +690,27 @@ invoiceRouter.post('/:id/send', async (req: AuthRequest, res: Response) => {
       ? (secondaryEmail || invoice.secondary_email)
       : null;
 
+    const shouldSendToAccountant = sendToAccountant === true;
+
+    if (shouldSendToAccountant) {
+      const accountantSettings = await query(
+        'SELECT accountant_email FROM settings WHERE user_id = $1',
+        [req.userId]
+      );
+      if (!accountantSettings.rows[0]?.accountant_email) {
+        return res.status(400).json({ error: 'Accountant email is not configured' });
+      }
+    }
+
     // Send email
     const result = await sendInvoiceEmail(
       req.params.id as string,
       req.userId!,
       invoice.primary_email,
       effectiveSecondaryEmail,
-      customMessage
+      customMessage,
+      shouldSendToAccountant,
+      accountantMessage
     );
 
     if (result.success) {
@@ -666,12 +721,19 @@ invoiceRouter.post('/:id/send', async (req: AuthRequest, res: Response) => {
           sent_at = COALESCE(sent_at, CURRENT_TIMESTAMP),
           primary_email_sent_at = CURRENT_TIMESTAMP,
           secondary_email_sent_at = CASE WHEN $1 THEN CURRENT_TIMESTAMP ELSE secondary_email_sent_at END,
+          accountant_email_sent_at = CASE WHEN $2 THEN CURRENT_TIMESTAMP ELSE accountant_email_sent_at END,
+          accountant_email_sent_to = CASE WHEN $2 THEN $3 ELSE accountant_email_sent_to END,
           updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2`,
-        [!!effectiveSecondaryEmail, req.params.id]
+         WHERE id = $4`,
+        [!!effectiveSecondaryEmail, !!result.accountantSent, result.accountantEmail || null, req.params.id]
       );
 
-      res.json({ message: 'Invoice sent successfully', sentTo: result.sentTo });
+      res.json({
+        message: 'Invoice sent successfully',
+        sentTo: result.sentTo,
+        accountantSent: result.accountantSent,
+        accountantError: result.accountantError
+      });
     } else {
       res.status(500).json({ error: result.error || 'Failed to send invoice' });
     }

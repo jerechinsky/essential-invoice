@@ -6,6 +6,15 @@
     "allStatuses": "Všechny stavy",
     "unpaid": "Nezaplaceno",
     "paid": "Zaplaceno",
+    "import": {
+      "button": "Importovat Alza PDF",
+      "importing": "Importuji...",
+      "success": "Importováno: {{count}}",
+      "failed": "Nepodařilo se importovat: {{count}}",
+      "requestFailed": "Import faktur se nezdařil",
+      "tooMany": "Najednou lze importovat nejvýše 10 PDF",
+      "result": "Neimportované soubory"
+    },
     "table": {
       "number": "Číslo",
       "supplier": "Dodavatel",
@@ -47,6 +56,11 @@
       "uploadPrompt": "Klikněte pro nahrání souboru (PDF, JPEG, PNG, max 5 MB)",
       "allowedFormats": "Povolené formáty: PDF, JPEG, PNG",
       "maxFileSize": "Maximální velikost souboru je 5 MB"
+    },
+    "import": {
+      "parsing": "Načítám údaje z PDF...",
+      "success": "Údaje z Alza faktury byly doplněny",
+      "failed": "Údaje z PDF se nepodařilo načíst"
     },
     "description": {
       "title": "Popis",

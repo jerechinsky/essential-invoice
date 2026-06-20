@@ -47,6 +47,12 @@ Configure per-user email sending in Settings > Email (SMTP):
 - Username and password
 - Sender email and name
 
+### Accountant forwarding
+
+In Settings, add the accountant email, customize the accountant message template, and choose whether **Send to accountant** is checked by default. Available placeholders are `{{invoiceNumber}}`, `{{total}}`, `{{issueDate}}`, `{{dueDate}}`, `{{clientName}}`, and `{{senderName}}`.
+
+The invoice send dialog shows the accountant address and a separate editable message. Successful delivery records the date and recipient address on the invoice. Recurring invoices with auto-send enabled also forward to the accountant when the default checkbox preference is enabled.
+
 ## IMAP Configuration (In-App)
 
 Configure bank notification receiving in Settings > Email (IMAP):

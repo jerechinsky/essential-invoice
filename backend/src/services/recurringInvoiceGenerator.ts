@@ -160,8 +160,12 @@ export async function generateInvoiceFromRecurring(template: RecurringInvoiceRow
     if (template.auto_send) {
       try {
         const clientResult = await query(
-          'SELECT primary_email, secondary_email FROM clients WHERE id = $1',
-          [template.client_id]
+          `SELECT c.primary_email, c.secondary_email,
+                  COALESCE(s.accountant_send_default, false) AS accountant_send_default
+           FROM clients c
+           LEFT JOIN settings s ON s.user_id = $2
+           WHERE c.id = $1`,
+          [template.client_id, template.user_id]
         );
         const client = clientResult.rows[0];
         if (client) {
@@ -169,14 +173,23 @@ export async function generateInvoiceFromRecurring(template: RecurringInvoiceRow
             invoice.id,
             template.user_id,
             client.primary_email,
-            null
+            null,
+            undefined,
+            client.accountant_send_default
           );
           if (sendResult.success) {
             await query(
-              `UPDATE invoices SET status = 'sent', sent_at = CURRENT_TIMESTAMP, primary_email_sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-              [invoice.id]
+              `UPDATE invoices SET status = 'sent', sent_at = CURRENT_TIMESTAMP,
+                 primary_email_sent_at = CURRENT_TIMESTAMP,
+                 accountant_email_sent_at = CASE WHEN $1 THEN CURRENT_TIMESTAMP ELSE accountant_email_sent_at END,
+                 accountant_email_sent_to = CASE WHEN $1 THEN $2 ELSE accountant_email_sent_to END,
+                 updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+              [!!sendResult.accountantSent, sendResult.accountantEmail || null, invoice.id]
             );
             log.info(`    Auto-sent invoice ${invoice.invoice_number}`);
+            if (sendResult.accountantError) {
+              log.warn(`    Accountant copy failed: ${sendResult.accountantError}`);
+            }
           } else {
             log.error(`    Failed to auto-send: ${sendResult.error}`);
           }

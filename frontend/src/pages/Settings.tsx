@@ -27,6 +27,9 @@ interface Settings {
   defaultVatRate: number;
   defaultPaymentTerms: number;
   emailTemplate: string | null;
+  accountantEmail: string | null;
+  accountantEmailTemplate: string | null;
+  accountantSendDefault: boolean;
   calculatorEnabled: boolean;
   aiEnabled: boolean;
   perplexityApiKeySet: boolean;
@@ -91,6 +94,9 @@ export default function Settings() {
     defaultVatRate: 21,
     defaultPaymentTerms: 14,
     emailTemplate: '',
+    accountantEmail: '',
+    accountantEmailTemplate: '',
+    accountantSendDefault: false,
     calculatorEnabled: false,
     aiEnabled: true,
     perplexityApiKey: '',
@@ -127,6 +133,9 @@ export default function Settings() {
         defaultVatRate: result.defaultVatRate ?? 21,
         defaultPaymentTerms: result.defaultPaymentTerms ?? 14,
         emailTemplate: result.emailTemplate || '',
+        accountantEmail: result.accountantEmail || '',
+        accountantEmailTemplate: result.accountantEmailTemplate || '',
+        accountantSendDefault: result.accountantSendDefault ?? false,
         calculatorEnabled: result.calculatorEnabled ?? false,
         aiEnabled: result.aiEnabled ?? true,
         perplexityApiKey: '',
@@ -594,6 +603,56 @@ export default function Settings() {
             rows={6}
             placeholder={t('emailTemplate.placeholder')}
           />
+        </div>
+
+        {/* Accountant forwarding */}
+        <div className="card">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+              <Mail className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('accountant.heading')}</h2>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            {t('accountant.description')}
+          </p>
+          <div className="space-y-4">
+            <div>
+              <label className="label">{t('accountant.email')}</label>
+              <input
+                type="email"
+                name="accountantEmail"
+                value={formData.accountantEmail}
+                onChange={handleChange}
+                className="input"
+                placeholder={t('accountant.emailPlaceholder')}
+              />
+            </div>
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                name="accountantSendDefault"
+                checked={formData.accountantSendDefault}
+                onChange={handleChange}
+                className="rounded border-gray-300 text-indigo-600"
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-400">{t('accountant.sendDefault')}</span>
+            </label>
+            <div>
+              <label className="label">{t('accountant.template')}</label>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                {t('accountant.variablesHelp')}
+              </p>
+              <textarea
+                name="accountantEmailTemplate"
+                value={formData.accountantEmailTemplate}
+                onChange={handleChange}
+                className="input"
+                rows={6}
+                placeholder={t('accountant.templatePlaceholder')}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Submit */}

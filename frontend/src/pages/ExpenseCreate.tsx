@@ -9,6 +9,18 @@ interface Client {
   id: string;
   companyName: string;
   primaryEmail: string;
+  ico?: string;
+}
+
+interface ParsedExpense {
+  supplierIco: string;
+  supplierInvoiceNumber: string;
+  issueDate: string;
+  dueDate: string;
+  currency: string;
+  amount: number;
+  vatRate: number;
+  description: string;
 }
 
 export default function ExpenseCreate() {
@@ -20,6 +32,7 @@ export default function ExpenseCreate() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [parsing, setParsing] = useState(false);
 
   const [formData, setFormData] = useState({
     clientId: '',
@@ -77,7 +90,7 @@ export default function ExpenseCreate() {
     setFormData(prev => ({ ...prev, [name]: value }));
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -100,6 +113,30 @@ export default function ExpenseCreate() {
       setFileMimeType(file.type);
     };
     reader.readAsDataURL(file);
+
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      setParsing(true);
+      try {
+        const parsed = await api.uploadFile('/expenses/import/preview', file) as ParsedExpense;
+        const supplier = clients.find(client => client.ico === parsed.supplierIco);
+        setFormData(previous => ({
+          ...previous,
+          clientId: supplier?.id ?? previous.clientId,
+          supplierInvoiceNumber: parsed.supplierInvoiceNumber,
+          issueDate: parsed.issueDate,
+          dueDate: parsed.dueDate,
+          currency: parsed.currency,
+          amount: parsed.amount,
+          vatRate: parsed.vatRate,
+          description: parsed.description,
+        }));
+        toast.success(t('create.import.success'));
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : t('create.import.failed'));
+      } finally {
+        setParsing(false);
+      }
+    }
   }
 
   function removeFile() {
@@ -318,7 +355,10 @@ export default function ExpenseCreate() {
 
         {/* File attachment */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('create.attachment.title')}</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('create.attachment.title')}</h2>
+            {parsing && <span className="text-sm text-indigo-600">{t('create.import.parsing')}</span>}
+          </div>
           {fileName ? (
             <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
               <span className="text-gray-700 dark:text-gray-300">{fileName}</span>

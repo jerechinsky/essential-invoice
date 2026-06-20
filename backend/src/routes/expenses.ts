@@ -1,9 +1,18 @@
 import { Router, Response } from 'express';
 import { body, validationResult } from 'express-validator';
+import multer from 'multer';
 import { query } from '../db/init';
 import { AuthRequest } from '../middleware/auth';
+import { parseAlzaInvoice } from '../services/alzaInvoiceParser';
 
 export const expenseRouter: ReturnType<typeof Router> = Router();
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 10 },
+  fileFilter: (_req, file, callback) => {
+    callback(null, file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf'));
+  },
+});
 
 // Generate expense number based on issue date
 async function generateExpenseNumber(userId: string, issueDate: string, attempt: number = 0): Promise<string> {
@@ -22,6 +31,80 @@ async function generateExpenseNumber(userId: string, issueDate: string, attempt:
   const count = parseInt(result.rows[0].count) + 1 + attempt;
   return `${datePrefix}${String(count).padStart(2, '0')}`;
 }
+
+// Parse one Alza PDF without saving it, so the normal form can be reviewed before creation.
+expenseRouter.post('/import/preview', pdfUpload.single('file'), async (req: AuthRequest, res: Response) => {
+  if (!req.file) return res.status(400).json({ error: 'A PDF file is required' });
+
+  try {
+    res.json(parseAlzaInvoice(req.file.buffer));
+  } catch (error) {
+    res.status(422).json({ error: error instanceof Error ? error.message : 'Could not parse the invoice' });
+  }
+});
+
+// Import up to 10 Alza PDFs. Each file succeeds or fails independently.
+expenseRouter.post('/import', pdfUpload.array('files', 10), async (req: AuthRequest, res: Response) => {
+  const files = req.files as Express.Multer.File[] | undefined;
+  if (!files?.length) return res.status(400).json({ error: 'At least one PDF file is required' });
+
+  const imported: Array<{ fileName: string; id: string; expenseNumber: string; supplierInvoiceNumber: string }> = [];
+  const failed: Array<{ fileName: string; error: string }> = [];
+
+  for (const file of files) {
+    try {
+      const parsed = parseAlzaInvoice(file.buffer);
+      const duplicate = await query(
+        'SELECT id FROM expenses WHERE user_id = $1 AND supplier_invoice_number = $2 LIMIT 1',
+        [req.userId, parsed.supplierInvoiceNumber]
+      );
+      if (duplicate.rows.length) throw new Error(`Invoice ${parsed.supplierInvoiceNumber} has already been imported`);
+
+      const supplier = await query(
+        'SELECT id FROM clients WHERE user_id = $1 AND ico = $2 LIMIT 1',
+        [req.userId, parsed.supplierIco]
+      );
+      const clientId = supplier.rows[0]?.id ?? null;
+
+      let expenseNumber = '';
+      let importedId = '';
+      for (let attempt = 0; attempt <= 3; attempt += 1) {
+        expenseNumber = await generateExpenseNumber(req.userId!, parsed.issueDate, attempt);
+        try {
+          const result = await query(
+            `INSERT INTO expenses (user_id, client_id, expense_number, supplier_invoice_number,
+             status, currency, issue_date, due_date, amount, vat_rate, vat_amount, total,
+             description, file_data, file_name, file_mime_type)
+             VALUES ($1, $2, $3, $4, 'unpaid', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'application/pdf')
+             RETURNING id`,
+            [req.userId, clientId, expenseNumber, parsed.supplierInvoiceNumber,
+             parsed.currency, parsed.issueDate, parsed.dueDate, parsed.amount, parsed.vatRate,
+             parsed.vatAmount, parsed.total, parsed.description, file.buffer.toString('base64'), file.originalname]
+          );
+          importedId = result.rows[0].id;
+          break;
+        } catch (error: any) {
+          if (error.code === '23505' && error.constraint === 'expenses_user_expense_number_key' && attempt < 3) continue;
+          throw error;
+        }
+      }
+
+      imported.push({
+        fileName: file.originalname,
+        id: importedId,
+        expenseNumber,
+        supplierInvoiceNumber: parsed.supplierInvoiceNumber,
+      });
+    } catch (error) {
+      failed.push({
+        fileName: file.originalname,
+        error: error instanceof Error ? error.message : 'Could not import the invoice',
+      });
+    }
+  }
+
+  res.json({ imported, failed });
+});
 
 // Get all expenses
 expenseRouter.get('/', async (req: AuthRequest, res: Response) => {

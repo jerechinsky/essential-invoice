@@ -6,6 +6,15 @@
     "allStatuses": "All statuses",
     "unpaid": "Unpaid",
     "paid": "Paid",
+    "import": {
+      "button": "Import Alza PDFs",
+      "importing": "Importing...",
+      "success": "Imported: {{count}}",
+      "failed": "Failed to import: {{count}}",
+      "requestFailed": "Invoice import failed",
+      "tooMany": "You can import at most 10 PDFs at once",
+      "result": "Files not imported"
+    },
     "table": {
       "number": "Number",
       "supplier": "Supplier",
@@ -47,6 +56,11 @@
       "uploadPrompt": "Click to upload a file (PDF, JPEG, PNG, max 5 MB)",
       "allowedFormats": "Allowed formats: PDF, JPEG, PNG",
       "maxFileSize": "Maximum file size is 5 MB"
+    },
+    "import": {
+      "parsing": "Reading PDF data...",
+      "success": "Alza invoice data was filled in",
+      "failed": "Could not read data from the PDF"
     },
     "description": {
       "title": "Description",

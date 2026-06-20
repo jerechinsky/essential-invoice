@@ -97,6 +97,25 @@ export const api = {
 
     return response.json();
   },
+
+  uploadFiles: async (endpoint: string, files: File[], fieldName: string = 'files') => {
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    files.forEach(file => formData.append(fieldName, file));
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new ApiError(error.error || 'Upload failed', response.status);
+    }
+
+    return response.json();
+  },
 };
 
 export { ApiError };

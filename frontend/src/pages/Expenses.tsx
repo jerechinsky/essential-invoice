@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../utils/api';
+import { toast } from 'sonner';
 import { formatCurrency, formatDate, getExpenseStatusLabel, getExpenseStatusColor } from '../utils/format';
-import { Plus, Search, Filter, Receipt } from 'lucide-react';
+import { Plus, Search, Filter, Receipt, Upload } from 'lucide-react';
 
 interface Expense {
   id: string;
@@ -19,12 +20,19 @@ interface Expense {
   hasFile: boolean;
 }
 
+interface ImportResult {
+  imported: Array<{ fileName: string; expenseNumber: string }>;
+  failed: Array<{ fileName: string; error: string }>;
+}
+
 export default function Expenses() {
   const { t } = useTranslation('expenses');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   useEffect(() => {
     loadExpenses();
@@ -41,6 +49,29 @@ export default function Expenses() {
       console.error('Failed to load expenses:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleBatchImport(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (!files.length) return;
+    if (files.length > 10) {
+      toast.error(t('list.import.tooMany'));
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const result = await api.uploadFiles('/expenses/import', files) as ImportResult;
+      setImportResult(result);
+      await loadExpenses();
+      if (result.imported.length) toast.success(t('list.import.success', { count: result.imported.length }));
+      if (result.failed.length) toast.error(t('list.import.failed', { count: result.failed.length }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('list.import.requestFailed'));
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -62,11 +93,27 @@ export default function Expenses() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('list.title')}</h1>
-        <Link to="/expenses/new" className="btn btn-primary flex items-center space-x-2">
-          <Plus className="h-4 w-4" />
-          <span>{t('list.newExpense')}</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <label className={`btn btn-secondary flex items-center space-x-2 ${importing ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+            <Upload className="h-4 w-4" />
+            <span>{importing ? t('list.import.importing') : t('list.import.button')}</span>
+            <input type="file" accept=".pdf,application/pdf" multiple disabled={importing} onChange={handleBatchImport} className="hidden" />
+          </label>
+          <Link to="/expenses/new" className="btn btn-primary flex items-center space-x-2">
+            <Plus className="h-4 w-4" />
+            <span>{t('list.newExpense')}</span>
+          </Link>
+        </div>
       </div>
+
+      {importResult && importResult.failed.length > 0 && (
+        <div className="card border border-amber-200 dark:border-amber-800">
+          <p className="font-medium text-gray-900 dark:text-gray-100 mb-2">{t('list.import.result')}</p>
+          <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
+            {importResult.failed.map(item => <li key={item.fileName}>{item.fileName}: {item.error}</li>)}
+          </ul>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">

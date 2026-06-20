@@ -11,10 +11,10 @@ A lightweight, self-hosted invoicing web application designed for Czech freelanc
 - **AI-Powered Features**: Smart payment matching (only if native parsing fails), invoice insights, Czech tax advisor chatbot (via Perplexity AI)
 - **Invoice Management**: Create, edit, duplicate, and send invoices with configurable automatic numbering formats and starting sequence, plus previewed CSV migration from Fakturoid with automatic contact creation
 - **Recurring Invoices**: Monthly recurring invoice templates with optional auto-send
-- **Expense Tracking**: Track business expenses with PDF attachments and automatic numbering
+- **Expense Tracking**: Track business expenses with PDF attachments, automatic numbering, and single or batch Alza PDF import
 - **Client Management**: Store and manage client contacts with ARES API integration for Czech companies
 - **PDF Generation**: Professional Czech invoice templates with selectable classic/minimalistic layouts, QR payment codes (SPAYD format), VAT/non-VAT payer support, optional units, and optional company registry footer text
-- **Email Integration**: Send invoices via SMTP, receive bank notifications via IMAP
+- **Email Integration**: Send invoices via SMTP, optionally forward a separately templated copy to an accountant, track accountant delivery per invoice, and receive bank notifications via IMAP
 - **Bank Payment Matching**: Automatic matching of Air Bank payment notifications to invoices
 - **Password Reset**: Email-based password recovery with secure token flow
 - **Welcome Emails**: Automatic welcome email on registration (when global SMTP configured)

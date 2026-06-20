@@ -37,6 +37,9 @@ settingsRouter.get('/', async (req: AuthRequest, res: Response) => {
         defaultVatRate: 21,
         defaultPaymentTerms: 14,
         emailTemplate: null,
+        accountantEmail: null,
+        accountantEmailTemplate: null,
+        accountantSendDefault: false,
         calculatorEnabled: false,
         aiEnabled: true,
         perplexityApiKeySet: false
@@ -67,6 +70,9 @@ settingsRouter.get('/', async (req: AuthRequest, res: Response) => {
       defaultVatRate: parseFloat(settings.default_vat_rate),
       defaultPaymentTerms: settings.default_payment_terms,
       emailTemplate: settings.email_template,
+      accountantEmail: settings.accountant_email,
+      accountantEmailTemplate: settings.accountant_email_template,
+      accountantSendDefault: settings.accountant_send_default ?? false,
       calculatorEnabled: settings.calculator_enabled ?? false,
       aiEnabled: settings.ai_enabled ?? true,
       perplexityApiKeySet: !!settings.perplexity_api_key
@@ -86,6 +92,9 @@ settingsRouter.put('/', async (req: AuthRequest, res: Response) => {
     invoiceNumberPrefix, invoiceNumberFormat, invoiceNumberStartingSequence, invoiceNumberResetPeriod, invoicePdfTemplate,
     defaultVatRate, defaultPaymentTerms,
     emailTemplate,
+    accountantEmail,
+    accountantEmailTemplate,
+    accountantSendDefault,
     calculatorEnabled,
     aiEnabled,
     perplexityApiKey
@@ -130,6 +139,9 @@ settingsRouter.put('/', async (req: AuthRequest, res: Response) => {
     addUpdate('default_vat_rate', defaultVatRate);
     addUpdate('default_payment_terms', defaultPaymentTerms);
     addUpdate('email_template', emailTemplate);
+    addUpdate('accountant_email', typeof accountantEmail === 'string' ? accountantEmail.trim() || null : accountantEmail);
+    addUpdate('accountant_email_template', accountantEmailTemplate);
+    addUpdate('accountant_send_default', accountantSendDefault);
     addUpdate('calculator_enabled', calculatorEnabled);
     addUpdate('ai_enabled', aiEnabled);
     if (perplexityApiKey) addUpdate('perplexity_api_key', encrypt(perplexityApiKey)); // Only update if provided
