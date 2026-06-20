@@ -16,6 +16,29 @@
     "message": "Máte {{count}} nespárovaných plateb",
     "link": "Zobrazit platby"
   },
+  "vat": {
+    "title": "Odhad DPH",
+    "description": "DPH z vystavených faktur minus DPH ze zaplacených nákladů podle data vystavení.",
+    "periodLabel": "Měsíce",
+    "netRevenue": "Fakturace bez DPH",
+    "netRevenueHelp": "Vystavené faktury bez DPH",
+    "outputVat": "DPH z faktur",
+    "outputVatHelp": "Vybraná DPH na výstupu",
+    "inputVat": "DPH z nákladů",
+    "manageExpenses": "Zkontrolovat zaplacené náklady",
+    "estimatedDue": "Odhad DPH k odložení",
+    "estimatedCredit": "Odhad nadměrného odpočtu",
+    "formula": "DPH z faktur − DPH z nákladů",
+    "table": {
+      "month": "Měsíc",
+      "netRevenue": "Bez DPH",
+      "outputVat": "DPH z faktur",
+      "inputVat": "DPH z nákladů",
+      "balance": "Odhad"
+    },
+    "foreignCurrencyWarning": "Položky v cizí měně nejsou zahrnuty (faktury bez kurzu: {{invoiceCount}}, náklady: {{expenseCount}}).",
+    "disclaimer": "Jde pouze o orientační odhad. Odpočitatelné náklady a přiznání k DPH ověřte s účetní."
+  },
   "chart": {
     "totalRevenue": "Celkové tržby",
     "income": "Příjmy",

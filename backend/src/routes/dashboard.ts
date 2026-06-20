@@ -7,6 +7,12 @@ export const dashboardRouter: ReturnType<typeof Router> = Router();
 // Get dashboard statistics
 dashboardRouter.get('/', async (req: AuthRequest, res: Response) => {
   try {
+    const requestedVatMonths = Number.parseInt(String(req.query.vatMonths ?? '3'), 10);
+    const vatPeriodMonths = Number.isInteger(requestedVatMonths) && requestedVatMonths >= 1 && requestedVatMonths <= 12
+      ? requestedVatMonths
+      : 3;
+    const vatMonthsBeforeCurrent = vatPeriodMonths - 1;
+
     // Get overall statistics
     const statsResult = await query(`
       SELECT
@@ -86,9 +92,9 @@ dashboardRouter.get('/', async (req: AuthRequest, res: Response) => {
       WHERE user_id = $1 AND invoice_id IS NULL
     `, [req.userId]);
 
-    // Get paušální daň settings from users table
+    // Get tax settings from users table
     const settingsResult = await query(`
-      SELECT pausalni_dan_enabled, pausalni_dan_tier, pausalni_dan_limit
+      SELECT vat_payer, pausalni_dan_enabled, pausalni_dan_tier, pausalni_dan_limit
       FROM users
       WHERE id = $1
     `, [req.userId]);
@@ -103,6 +109,98 @@ dashboardRouter.get('/', async (req: AuthRequest, res: Response) => {
         AND status = 'paid'
         AND paid_at >= date_trunc('year', CURRENT_DATE)
     `, [req.userId]);
+
+    // Get the selected number of calendar months, including the current partial month.
+    // Issued invoices contribute output VAT; paid expenses contribute deductible input VAT.
+    const vatSummaryResult = await query(`
+      WITH months AS (
+        SELECT generate_series(
+          date_trunc('month', CURRENT_DATE) - ($2::int * INTERVAL '1 month'),
+          date_trunc('month', CURRENT_DATE),
+          INTERVAL '1 month'
+        )::date AS month
+      ),
+      invoice_totals AS (
+        SELECT
+          date_trunc('month', issue_date)::date AS month,
+          COALESCE(SUM(
+            CASE
+              WHEN currency = 'CZK' THEN subtotal
+              WHEN exchange_rate IS NOT NULL THEN subtotal * exchange_rate
+              ELSE 0
+            END
+          ), 0) AS net_revenue,
+          COALESCE(SUM(
+            CASE
+              WHEN currency = 'CZK' THEN vat_amount
+              WHEN exchange_rate IS NOT NULL THEN vat_amount * exchange_rate
+              ELSE 0
+            END
+          ), 0) AS output_vat,
+          COUNT(*) FILTER (
+            WHERE currency <> 'CZK' AND exchange_rate IS NULL
+          ) AS excluded_foreign_invoice_count
+        FROM invoices
+        WHERE user_id = $1
+          AND status IN ('sent', 'overdue', 'paid')
+          AND issue_date >= date_trunc('month', CURRENT_DATE) - ($2::int * INTERVAL '1 month')
+          AND issue_date <= CURRENT_DATE
+        GROUP BY date_trunc('month', issue_date)
+      ),
+      expense_totals AS (
+        SELECT
+          date_trunc('month', issue_date)::date AS month,
+          COALESCE(SUM(vat_amount) FILTER (WHERE currency = 'CZK'), 0) AS input_vat,
+          COUNT(*) FILTER (WHERE currency <> 'CZK') AS excluded_foreign_expense_count
+        FROM expenses
+        WHERE user_id = $1
+          AND status = 'paid'
+          AND issue_date >= date_trunc('month', CURRENT_DATE) - ($2::int * INTERVAL '1 month')
+          AND issue_date <= CURRENT_DATE
+        GROUP BY date_trunc('month', issue_date)
+      )
+      SELECT
+        to_char(months.month, 'YYYY-MM-DD') AS month,
+        CURRENT_DATE::text AS period_end,
+        COALESCE(invoice_totals.net_revenue, 0) AS net_revenue,
+        COALESCE(invoice_totals.output_vat, 0) AS output_vat,
+        COALESCE(expense_totals.input_vat, 0) AS input_vat,
+        COALESCE(invoice_totals.excluded_foreign_invoice_count, 0) AS excluded_foreign_invoice_count,
+        COALESCE(expense_totals.excluded_foreign_expense_count, 0) AS excluded_foreign_expense_count
+      FROM months
+      LEFT JOIN invoice_totals ON invoice_totals.month = months.month
+      LEFT JOIN expense_totals ON expense_totals.month = months.month
+      ORDER BY months.month ASC
+    `, [req.userId, vatMonthsBeforeCurrent]);
+
+    const vatMonths = vatSummaryResult.rows.map(row => {
+      const outputVat = parseFloat(row.output_vat);
+      const inputVat = parseFloat(row.input_vat);
+
+      return {
+        month: row.month,
+        netRevenue: parseFloat(row.net_revenue),
+        outputVat,
+        inputVat,
+        estimatedVatDue: outputVat - inputVat
+      };
+    });
+
+    const vatSummary = vatMonths.reduce((summary, month) => ({
+      netRevenue: summary.netRevenue + month.netRevenue,
+      outputVat: summary.outputVat + month.outputVat,
+      inputVat: summary.inputVat + month.inputVat,
+      estimatedVatDue: summary.estimatedVatDue + month.estimatedVatDue
+    }), { netRevenue: 0, outputVat: 0, inputVat: 0, estimatedVatDue: 0 });
+
+    const excludedForeignInvoiceCount = vatSummaryResult.rows.reduce(
+      (total, row) => total + parseInt(row.excluded_foreign_invoice_count),
+      0
+    );
+    const excludedForeignExpenseCount = vatSummaryResult.rows.reduce(
+      (total, row) => total + parseInt(row.excluded_foreign_expense_count),
+      0
+    );
 
     const pausalniDanSettings = settingsResult.rows[0] || { pausalni_dan_enabled: false, pausalni_dan_tier: 1, pausalni_dan_limit: 1000000 };
     const tier = pausalniDanSettings.pausalni_dan_tier || 1;
@@ -148,6 +246,17 @@ dashboardRouter.get('/', async (req: AuthRequest, res: Response) => {
         limit: limit,
         invoicedThisYear: invoicedThisYear,
         remaining: Math.max(0, limit - invoicedThisYear)
+      },
+      vatSummary: {
+        enabled: pausalniDanSettings.vat_payer ?? false,
+        periodMonths: vatPeriodMonths,
+        periodStart: vatMonths[0]?.month ?? null,
+        periodEnd: vatSummaryResult.rows[0]?.period_end ?? null,
+        currency: 'CZK',
+        ...vatSummary,
+        excludedForeignInvoiceCount,
+        excludedForeignExpenseCount,
+        months: vatMonths
       }
     });
   } catch (error) {

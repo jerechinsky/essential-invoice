@@ -9,7 +9,7 @@ A lightweight, self-hosted invoicing web application designed for Czech freelanc
 ## Features
 
 - **AI-Powered Features**: Smart payment matching (only if native parsing fails), invoice insights, Czech tax advisor chatbot (via Perplexity AI)
-- **Invoice Management**: Create, edit, duplicate, and send invoices with configurable automatic numbering formats and starting sequence
+- **Invoice Management**: Create, edit, duplicate, and send invoices with configurable automatic numbering formats and starting sequence, plus previewed CSV migration from Fakturoid with automatic contact creation
 - **Recurring Invoices**: Monthly recurring invoice templates with optional auto-send
 - **Expense Tracking**: Track business expenses with PDF attachments and automatic numbering
 - **Client Management**: Store and manage client contacts with ARES API integration for Czech companies
@@ -20,7 +20,7 @@ A lightweight, self-hosted invoicing web application designed for Czech freelanc
 - **Welcome Emails**: Automatic welcome email on registration (when global SMTP configured)
 - **Onboarding Wizard**: Guided 2-step setup after registration to collect company and bank details
 - **Account Deletion**: Self-service account deletion with password confirmation
-- **Dashboard**: Overview of revenue, outstanding payments, and recent activity
+- **Dashboard**: Revenue, outstanding payments, recent activity, and a configurable VAT estimate from issued invoices and paid expenses
 - **Multi-language**: Czech and English UI, PDFs, and emails with language setting in profile
 - **Multi-currency**: Support for CZK and EUR
 - **Docker Ready**: Single command deployment with docker compose

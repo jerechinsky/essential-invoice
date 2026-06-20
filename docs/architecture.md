@@ -6,7 +6,7 @@ Essential Invoice is a self-hosted invoicing application for Czech freelancers w
 
 - **Express API** with JWT authentication and rate limiting
 - **Entry point**: `index.ts` - Express app setup, middleware, route mounting
-- **Routes**: `routes/` - REST endpoints for auth (register, login, forgot-password, reset-password, delete account), clients, invoices, recurring invoices, expenses, payments, settings, ARES lookup, dashboard, AI
+- **Routes**: `routes/` - REST endpoints for auth (register, login, forgot-password, reset-password, delete account), clients, invoices, Fakturoid invoice imports, recurring invoices, expenses, payments, settings, ARES lookup, dashboard, AI. The dashboard derives a configurable 1–12 month VAT estimate from issued-invoice VAT minus VAT on paid expenses.
 - **Services**: `services/` - Business logic:
   - `pdfGenerator.ts` - Invoice PDF generation using **pdfmake** library with Czech formatting, selectable classic/minimalistic templates, QR payment codes (SPAYD), VAT/non-VAT payer support (hides DIČ and shows "Neplátce DPH" for non-VAT payers, hides DPH line when rate is 0%), optional company registry footer text, and simplified layouts for invoices without item units
   - `emailSender.ts` - Per-user SMTP email sending for invoice delivery
@@ -15,6 +15,7 @@ Essential Invoice is a self-hosted invoicing application for Czech freelancers w
   - `recurringInvoiceGenerator.ts` - In-process scheduler (setInterval) that auto-generates invoices from recurring templates, with optional auto-send via SMTP
   - `perplexityAI.ts` - Perplexity AI integration for tax advice and financial guidance
   - `cnbExchangeRate.ts` - CNB (Czech National Bank) exchange rate fetching with DB caching and weekend/holiday fallback. Used to convert EUR invoices to CZK equivalents for dashboard totals and paušální daň tracking
+  - `fakturoidCsvImport.ts` - RFC-style CSV parsing, row validation, status/amount mapping, idempotent invoice migration, and missing-contact creation for Fakturoid exports
   - `bankParsers/` - Extensible bank email parsing (Air Bank implemented)
 - **i18n**: `i18n/translations.ts` - Plain TypeScript translation maps (cs/en) for PDF labels and email templates. Services look up translations by the user's `language` column. Backend error messages use language-neutral error codes (e.g., `TOO_MANY_LOGIN_ATTEMPTS`) that the frontend maps to localized strings
 - **Utils**: `utils/` - Utility functions:
@@ -24,7 +25,7 @@ Essential Invoice is a self-hosted invoicing application for Czech freelancers w
 - **Scripts**: `scripts/delete-user.ts` - Admin CLI script to delete a user by email
 - **Seed**: `db/seed.ts` - Seeds test data (user, clients, invoices, expenses, payments) for development. Run with `bun run seed [email] [password]`
 - **Middleware**: `middleware/auth.ts` - JWT authentication middleware
-- **Database**: PostgreSQL with `pg` driver. Schema managed in `db/init.ts` using idempotent CREATE TABLE IF NOT EXISTS and inline ALTER TABLE migrations (no separate migration files). `db/migrate.ts` is the migration runner script. Users table includes `vat_payer` (BOOLEAN, default false) for VAT payer status, `onboarding_completed` (BOOLEAN, default false) to track new-user onboarding, `language` (VARCHAR(5), default 'cs') for locale preference, and `pausalni_dan_enabled`/`pausalni_dan_tier`/`pausalni_dan_limit` for paušální daň settings. The settings table stores token-based invoice numbering in `invoice_number_format`, the first-invoice bootstrap value in `invoice_number_starting_sequence`, and the independent monthly/yearly reset policy in `invoice_number_reset_period`. `password_reset_tokens` table stores hashed tokens for password reset flow. Invoices table includes `exchange_rate` (DECIMAL) and `total_czk` (DECIMAL) for EUR→CZK conversion. `exchange_rates` table caches fetched CNB rates by date and currency.
+- **Database**: PostgreSQL with `pg` driver. Schema managed in `db/init.ts` using idempotent CREATE TABLE IF NOT EXISTS and inline ALTER TABLE migrations (no separate migration files). `db/migrate.ts` is the migration runner script. Users table includes `vat_payer` (BOOLEAN, default false) for VAT payer status, `onboarding_completed` (BOOLEAN, default false) to track new-user onboarding, `language` (VARCHAR(5), default 'cs') for locale preference, and `pausalni_dan_enabled`/`pausalni_dan_tier`/`pausalni_dan_limit` for paušální daň settings. The settings table stores token-based invoice numbering in `invoice_number_format`, the first-invoice bootstrap value in `invoice_number_starting_sequence`, and the independent monthly/yearly reset policy in `invoice_number_reset_period`. `password_reset_tokens` table stores hashed tokens for password reset flow. Invoices include EUR→CZK fields plus `import_source` and `external_id`; a partial unique index makes external imports idempotent per user and source. `exchange_rates` caches fetched CNB rates by date and currency.
 
 ## Frontend (`frontend/src/`)
 

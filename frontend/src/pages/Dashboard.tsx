@@ -52,10 +52,30 @@ interface DashboardData {
   unmatchedPayments: number;
   pausalniDan: {
     enabled: boolean;
+    periodMonths: number;
     tier: number;
     limit: number;
     invoicedThisYear: number;
     remaining: number;
+  };
+  vatSummary: {
+    enabled: boolean;
+    periodStart: string | null;
+    periodEnd: string | null;
+    currency: 'CZK';
+    netRevenue: number;
+    outputVat: number;
+    inputVat: number;
+    estimatedVatDue: number;
+    excludedForeignInvoiceCount: number;
+    excludedForeignExpenseCount: number;
+    months: Array<{
+      month: string;
+      netRevenue: number;
+      outputVat: number;
+      inputVat: number;
+      estimatedVatDue: number;
+    }>;
   };
 }
 
@@ -66,14 +86,15 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedVatMonths, setSelectedVatMonths] = useState(3);
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    loadDashboard(selectedVatMonths);
+  }, [selectedVatMonths]);
 
-  async function loadDashboard() {
+  async function loadDashboard(vatMonths: number) {
     try {
-      const result = await api.get('/dashboard');
+      const result = await api.get(`/dashboard?vatMonths=${vatMonths}`);
       setData(result);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
@@ -124,6 +145,14 @@ export default function Dashboard() {
 
   const yearlyIncome = useMemo(() => chartData.reduce((sum, m) => sum + m.income, 0), [chartData]);
   const yearlyExpensesTotal = useMemo(() => chartData.reduce((sum, m) => sum + m.expenses, 0), [chartData]);
+  const vatPeriodLabel = useMemo(() => {
+    if (!data?.vatSummary?.periodStart || !data.vatSummary.periodEnd) return '';
+
+    const formatter = new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric' });
+    const start = new Date(`${data.vatSummary.periodStart}T00:00:00`);
+    const end = new Date(`${data.vatSummary.periodEnd}T00:00:00`);
+    return `${formatter.format(start)} – ${formatter.format(end)}`;
+  }, [data, locale]);
 
   if (loading) {
     return (
@@ -231,6 +260,136 @@ export default function Dashboard() {
             {t('unmatchedPayments.link')}
           </Link>
         </div>
+      )}
+
+      {/* Three-month VAT estimate */}
+      {data.vatSummary?.enabled && (
+        <section className="card" aria-labelledby="vat-summary-title">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-5">
+            <div>
+              <h2 id="vat-summary-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {t('vat.title')}
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {t('vat.description')}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start">
+              <label htmlFor="vat-period-months" className="text-xs text-gray-500 dark:text-gray-400">
+                {t('vat.periodLabel')}
+              </label>
+              <div className="relative">
+                <select
+                  id="vat-period-months"
+                  value={selectedVatMonths}
+                  onChange={(event) => setSelectedVatMonths(Number(event.target.value))}
+                  className="appearance-none rounded-lg bg-gray-100 dark:bg-gray-700 py-1.5 pl-3 pr-8 text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {[1, 3, 6, 12].map(months => (
+                    <option key={months} value={months}>{months}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400" />
+              </div>
+              <span className="rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 whitespace-nowrap">
+                {vatPeriodLabel}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('vat.netRevenue')}</p>
+              <p className="text-xl font-bold tabular-nums text-gray-900 dark:text-gray-100 mt-1">
+                {formatCurrency(data.vatSummary.netRevenue)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('vat.netRevenueHelp')}</p>
+            </div>
+
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('vat.outputVat')}</p>
+              <p className="text-xl font-bold tabular-nums text-gray-900 dark:text-gray-100 mt-1">
+                {formatCurrency(data.vatSummary.outputVat)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('vat.outputVatHelp')}</p>
+            </div>
+
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('vat.inputVat')}</p>
+              <p className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400 mt-1">
+                − {formatCurrency(data.vatSummary.inputVat)}
+              </p>
+              <Link to="/expenses" className="inline-block text-xs text-indigo-600 dark:text-indigo-400 hover:underline mt-1">
+                {t('vat.manageExpenses')}
+              </Link>
+            </div>
+
+            <div className={`rounded-lg border p-4 ${
+              data.vatSummary.estimatedVatDue >= 0
+                ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20'
+                : 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20'
+            }`}>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {data.vatSummary.estimatedVatDue >= 0 ? t('vat.estimatedDue') : t('vat.estimatedCredit')}
+              </p>
+              <p className={`text-xl font-bold tabular-nums mt-1 ${
+                data.vatSummary.estimatedVatDue >= 0
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : 'text-emerald-700 dark:text-emerald-300'
+              }`}>
+                {formatCurrency(Math.abs(data.vatSummary.estimatedVatDue))}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('vat.formula')}</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto mt-5">
+            <table className="w-full min-w-[680px] text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  <th className="py-2 pr-4 font-medium">{t('vat.table.month')}</th>
+                  <th className="py-2 px-4 text-right font-medium">{t('vat.table.netRevenue')}</th>
+                  <th className="py-2 px-4 text-right font-medium">{t('vat.table.outputVat')}</th>
+                  <th className="py-2 px-4 text-right font-medium">{t('vat.table.inputVat')}</th>
+                  <th className="py-2 pl-4 text-right font-medium">{t('vat.table.balance')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.vatSummary.months.map((month) => (
+                  <tr key={month.month} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                    <td className="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">
+                      {new Date(`${month.month}T00:00:00`).toLocaleDateString(locale, { month: 'long', year: 'numeric' })}
+                    </td>
+                    <td className="py-3 px-4 text-right tabular-nums text-gray-600 dark:text-gray-300">{formatCurrency(month.netRevenue)}</td>
+                    <td className="py-3 px-4 text-right tabular-nums text-gray-600 dark:text-gray-300">{formatCurrency(month.outputVat)}</td>
+                    <td className="py-3 px-4 text-right tabular-nums text-emerald-600 dark:text-emerald-400">− {formatCurrency(month.inputVat)}</td>
+                    <td className={`py-3 pl-4 text-right tabular-nums font-medium ${
+                      month.estimatedVatDue >= 0
+                        ? 'text-gray-900 dark:text-gray-100'
+                        : 'text-emerald-600 dark:text-emerald-400'
+                    }`}>
+                      {formatCurrency(month.estimatedVatDue)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {(data.vatSummary.excludedForeignInvoiceCount > 0 || data.vatSummary.excludedForeignExpenseCount > 0) && (
+            <div className="mt-4 flex items-start gap-2 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-3 text-sm text-yellow-800 dark:text-yellow-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                {t('vat.foreignCurrencyWarning', {
+                  invoiceCount: data.vatSummary.excludedForeignInvoiceCount,
+                  expenseCount: data.vatSummary.excludedForeignExpenseCount
+                })}
+              </span>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-4">{t('vat.disclaimer')}</p>
+        </section>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

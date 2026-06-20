@@ -16,6 +16,29 @@
     "message": "You have {{count}} unmatched payments",
     "link": "View payments"
   },
+  "vat": {
+    "title": "VAT estimate",
+    "description": "VAT from issued invoices minus VAT on paid expenses, based on issue dates.",
+    "periodLabel": "Months",
+    "netRevenue": "Net invoiced revenue",
+    "netRevenueHelp": "Issued invoices excluding VAT",
+    "outputVat": "VAT from invoices",
+    "outputVatHelp": "Output VAT collected",
+    "inputVat": "VAT on expenses",
+    "manageExpenses": "Review paid expenses",
+    "estimatedDue": "Estimated VAT to reserve",
+    "estimatedCredit": "Estimated VAT credit",
+    "formula": "Invoice VAT − expense VAT",
+    "table": {
+      "month": "Month",
+      "netRevenue": "Net revenue",
+      "outputVat": "Invoice VAT",
+      "inputVat": "Expense VAT",
+      "balance": "Estimate"
+    },
+    "foreignCurrencyWarning": "Foreign-currency items are excluded (invoices without a rate: {{invoiceCount}}, expenses: {{expenseCount}}).",
+    "disclaimer": "Planning estimate only. Verify deductible expenses and your VAT return with your accountant."
+  },
   "chart": {
     "totalRevenue": "Total revenue",
     "income": "Income",

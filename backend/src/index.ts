@@ -11,6 +11,7 @@ import { aresRouter } from './routes/ares';
 import { aiRouter } from './routes/ai';
 import { expenseRouter } from './routes/expenses';
 import { recurringRouter } from './routes/recurring';
+import { invoiceImportRouter } from './routes/invoiceImports';
 import { authenticateToken } from './middleware/auth';
 import { startEmailPolling } from './services/emailPoller';
 import { startRecurringInvoiceGeneration } from './services/recurringInvoiceGenerator';
@@ -73,6 +74,7 @@ app.use('/api/auth', authRouter);
 // Protected routes
 app.use('/api/clients', authenticateToken, clientRouter);
 app.use('/api/invoices', authenticateToken, invoiceRouter);
+app.use('/api/invoice-imports', authenticateToken, invoiceImportRouter);
 app.use('/api/dashboard', authenticateToken, dashboardRouter);
 app.use('/api/payments', authenticateToken, paymentRouter);
 app.use('/api/settings', authenticateToken, settingsRouter);

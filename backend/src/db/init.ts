@@ -342,6 +342,26 @@ export async function initializeDatabase() {
         END IF;
       END $$;
 
+      -- Track imported invoices so repeated migrations are idempotent
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'invoices' AND column_name = 'import_source'
+        ) THEN
+          ALTER TABLE invoices ADD COLUMN import_source VARCHAR(50);
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'invoices' AND column_name = 'external_id'
+        ) THEN
+          ALTER TABLE invoices ADD COLUMN external_id VARCHAR(100);
+        END IF;
+      END $$;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_import_source_external_id
+        ON invoices(user_id, import_source, external_id)
+        WHERE external_id IS NOT NULL;
+
       -- Exchange rates cache table
       CREATE TABLE IF NOT EXISTS exchange_rates (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

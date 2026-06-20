@@ -45,6 +45,13 @@ EUR invoices include `exchangeRate` (CNB rate at issue date) and `totalCzk` (con
 
 Invoice item `unit` values are optional. When all item units are empty, generated PDFs omit the quantity/unit column and render a simpler description/price layout.
 
+## Invoice Imports
+
+- `POST /api/invoice-imports/fakturoid/preview` - Validate Fakturoid invoice CSV content and return import counts, row issues, and a ten-invoice preview without writing data
+- `POST /api/invoice-imports/fakturoid` - Atomically import valid invoices and create missing contacts. Existing invoices are skipped by invoice number or Fakturoid ID
+
+Both endpoints accept JSON in the form `{ "csv": "..." }`. Imports are limited to 5 MB and 5,000 invoice rows. Proformas, unsupported currencies, invalid rows, and duplicate rows in the same CSV are skipped. Fakturoid invoice exports do not contain item-level data, so each imported invoice receives one synthetic item based on the exported subject while the exact exported subtotal, VAT, and total are preserved.
+
 ## Recurring Invoices
 
 - `GET /api/recurring-invoices` - List all recurring invoice templates
@@ -84,7 +91,7 @@ Invoice item `unit` values are optional. When all item units are empty, generate
 
 ## Dashboard
 
-- `GET /api/dashboard` - Get dashboard statistics
+- `GET /api/dashboard?vatMonths=3` - Get dashboard statistics. `vatMonths` selects 1–12 calendar months and defaults to 3. `vatSummary` contains a CZK estimate for that period: net invoiced revenue, output VAT from issued invoices, input VAT from paid expenses, the estimated balance, and monthly detail. Its `enabled` flag follows the user's VAT-payer setting. Foreign-currency expenses are counted but excluded because expenses do not currently store exchange rates.
 - `GET /api/dashboard/quick-stats` - Get quick stats for header
 
 ## Settings

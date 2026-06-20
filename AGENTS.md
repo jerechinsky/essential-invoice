@@ -61,7 +61,7 @@ This is a self-hosted invoicing application for Czech freelancers with frontend/
 ### Backend (`backend/src/`)
 - **Express API** with JWT authentication and rate limiting
 - **Entry point**: `index.ts` - Express app setup, middleware, route mounting
-- **Routes**: `routes/` - REST endpoints for auth (register, login, forgot-password, reset-password, delete account), clients, invoices, recurring invoices, expenses, payments, settings, ARES lookup, dashboard, AI
+- **Routes**: `routes/` - REST endpoints for auth (register, login, forgot-password, reset-password, delete account), clients, invoices, Fakturoid CSV imports, recurring invoices, expenses, payments, settings, ARES lookup, dashboard, AI. The dashboard derives a configurable 1–12 month VAT estimate from issued-invoice VAT minus VAT on paid expenses.
 - **Services**: `services/` - Business logic:
   - `pdfGenerator.ts` - Invoice PDF generation using **pdfmake** library with Czech formatting, QR payment codes (SPAYD), and VAT/non-VAT payer support (hides DIČ and shows "Neplátce DPH" for non-VAT payers, hides DPH line when rate is 0%)
   - `emailSender.ts` - Per-user SMTP email sending for invoice delivery
@@ -70,6 +70,7 @@ This is a self-hosted invoicing application for Czech freelancers with frontend/
   - `recurringInvoiceGenerator.ts` - In-process scheduler for auto-generating invoices from recurring templates (monthly), with optional auto-send
   - `perplexityAI.ts` - Perplexity AI integration for tax advice and financial guidance
   - `cnbExchangeRate.ts` - CNB (Czech National Bank) exchange rate fetching with DB caching and weekend/holiday fallback. Converts EUR invoices to CZK for dashboard totals and paušální daň tracking
+  - `fakturoidCsvImport.ts` - Validates and imports Fakturoid invoice CSV exports, reusing or creating contacts and preserving exported totals/statuses
   - `bankParsers/` - Extensible bank email parsing (Air Bank implemented)
 - **i18n**: `i18n/translations.ts` - Plain TypeScript translation maps (cs/en) for PDF labels and email templates. Backend services (pdfGenerator, emailSender, globalEmailSender) use the user's `language` preference to select translations
 - **Utils**: `utils/` - Utility functions:
