@@ -118,6 +118,61 @@ describe('Expenses Routes', () => {
     });
   });
 
+  describe('universal invoice import', () => {
+    const universalText = `=== INVOICE ===
+FILE: supplier-invoice.pdf
+SUPPLIER: Example Systems s.r.o.
+ICO: 12345678
+DIC: CZ12345678
+ADDRESS: Main 1, Prague
+INVOICE_NUMBER: 2026-001
+ISSUE_DATE: 2026-06-01
+DUE_DATE: 2026-06-15
+CURRENCY: CZK
+TAX_BASE: 1000.00
+VAT_RATE: 21
+VAT_AMOUNT: 210.00
+ROUNDING: 0.00
+TOTAL: 1210.00
+PAID: no
+DESCRIPTION: Cloud subscription
+NOTES: -
+=== END ===`;
+
+    it('imports structured data and attaches the matching source file', async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ id: 'supplier-client' }] }) // supplier match
+        .mockResolvedValueOnce({ rows: [] }) // duplicate check
+        .mockResolvedValueOnce({ rows: [{ count: '0' }] }) // expense number
+        .mockResolvedValueOnce({ rows: [{ id: 'expense-1' }] }); // insert
+
+      const response = await request(app)
+        .post('/expenses/import/universal')
+        .field('data', universalText)
+        .attach('files', Buffer.from('%PDF-test'), { filename: 'supplier-invoice.pdf', contentType: 'application/pdf' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.failed).toEqual([]);
+      expect(response.body.imported[0]).toMatchObject({
+        fileName: 'supplier-invoice.pdf', supplierInvoiceNumber: '2026-001', expenseNumber: 'N20260601',
+      });
+      expect(mockQuery.mock.calls[3][1]).toContain('unpaid');
+      expect(mockQuery.mock.calls[3][1]).toContain(Buffer.from('%PDF-test').toString('base64'));
+    });
+
+    it('rejects unmatched filenames before writing anything', async () => {
+      const response = await request(app)
+        .post('/expenses/import/universal')
+        .field('data', universalText)
+        .attach('files', Buffer.from('%PDF-test'), { filename: 'different.pdf', contentType: 'application/pdf' });
+
+      expect(response.status).toBe(422);
+      expect(response.body.error).toContain('Missing files: supplier-invoice.pdf');
+      expect(response.body.error).toContain('Files without invoice data: different.pdf');
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+  });
+
   describe('GET /expenses', () => {
     it('should return list of expenses', async () => {
       mockQuery.mockResolvedValueOnce({
@@ -217,6 +272,48 @@ describe('Expenses Routes', () => {
     });
   });
 
+  describe('PATCH /expenses/batch', () => {
+    it('updates payment status for the selected user expenses', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: '11111111-1111-4111-8111-111111111111', status: 'paid', paid_at: '2026-06-20T10:00:00Z' }] });
+
+      const response = await request(app).patch('/expenses/batch').send({
+        ids: ['11111111-1111-4111-8111-111111111111'],
+        status: 'paid',
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.updated).toBe(1);
+      expect(mockQuery.mock.calls[0][0]).toContain('id = ANY($3::uuid[])');
+      expect(mockQuery.mock.calls[0][1]).toEqual(['paid', 'test-user-id', ['11111111-1111-4111-8111-111111111111']]);
+    });
+
+    it('rejects unsupported batch statuses', async () => {
+      const response = await request(app).patch('/expenses/batch').send({
+        ids: ['11111111-1111-4111-8111-111111111111'],
+        status: 'cancelled',
+      });
+      expect(response.status).toBe(400);
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /expenses/batch-download', () => {
+    it('returns selected attachments in one ZIP archive', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{
+        id: '11111111-1111-4111-8111-111111111111', expense_number: 'N202601',
+        file_name: 'supplier.pdf', file_data: Buffer.from('%PDF-test').toString('base64'),
+      }] });
+
+      const response = await request(app).post('/expenses/batch-download').send({
+        ids: ['11111111-1111-4111-8111-111111111111'],
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toContain('application/zip');
+      expect(Buffer.from(response.body).readUInt32LE(0)).toBe(0x04034b50);
+    });
+  });
+
   describe('POST /expenses', () => {
     it('should create an expense', async () => {
       // Mock for generateExpenseNumber COUNT query
@@ -244,8 +341,29 @@ describe('Expenses Routes', () => {
       expect(response.status).toBe(201);
       expect(response.body.expenseNumber).toBe('N20260201');
       expect(response.body.status).toBe('paid');
-      expect(mockQuery.mock.calls[1][0]).toContain("'paid'");
+      expect(mockQuery.mock.calls[1][1]).toContain('paid');
       expect(mockQuery.mock.calls[1][0]).toContain('CURRENT_TIMESTAMP');
+    });
+
+    it('should create an unpaid expense when requested', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: '0' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'new-exp', expense_number: 'N20260201', status: 'unpaid', total: '1210.00' }]
+      });
+
+      const response = await request(app)
+        .post('/expenses')
+        .send({
+          issueDate: '2026-02-01',
+          dueDate: '2026-02-15',
+          amount: 1000,
+          vatRate: 21,
+          paid: false,
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.status).toBe('unpaid');
+      expect(mockQuery.mock.calls[1][1]).toContain('unpaid');
     });
 
     it('should create expense with client', async () => {
@@ -375,15 +493,36 @@ describe('Expenses Routes', () => {
       expect(response.status).toBe(200);
     });
 
-    it('should reject editing a paid expense', async () => {
+    it('should update a paid expense without changing its payment status', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ status: 'paid' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [{ amount: '1000.00', vat_rate: '21.00', vat_amount: '210.00', total: '1210.00' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'exp-1', expense_number: 'N20260201', status: 'paid', total: '2420.00' }]
+      });
 
       const response = await request(app)
         .put('/expenses/exp-1')
         .send({ amount: 2000, description: 'test', notes: 'test' });
 
-      expect(response.status).toBe(400);
-      expect(response.body.error).toContain('unpaid');
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('paid');
+    });
+
+    it('should preserve an explicitly entered gross total when editing', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ status: 'paid' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [{ amount: '1000.00', vat_rate: '21.00', vat_amount: '210.00', total: '1210.00' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'exp-1', expense_number: 'N20260201', status: 'paid', total: '1209.99' }]
+      });
+
+      const response = await request(app)
+        .put('/expenses/exp-1')
+        .send({ amount: 1000, vatRate: 21, total: 1209.99, description: null, notes: null });
+
+      expect(response.status).toBe(200);
+      const updateParams = mockQuery.mock.calls[2][1];
+      expect(updateParams).toContain(209.99);
+      expect(updateParams).toContain(1209.99);
     });
 
     it('should return 404 for non-existent expense', async () => {

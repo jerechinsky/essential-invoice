@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useDialogKeyboard } from '../hooks/useDialogKeyboard';
 import { toast } from 'sonner';
 import { api } from '../utils/api';
 import { formatCurrency, formatDate, getStatusLabel, getStatusColor } from '../utils/format';
@@ -82,7 +83,9 @@ export default function InvoiceDetail() {
     };
   } | null>(null);
   const [customMessage, setCustomMessage] = useState('');
+  const [customSubject, setCustomSubject] = useState('');
   const [accountantMessage, setAccountantMessage] = useState('');
+  const [accountantSubject, setAccountantSubject] = useState('');
   const [secondaryEmail, setSecondaryEmail] = useState('');
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
   const [paidDate, setPaidDate] = useState('');
@@ -109,16 +112,28 @@ export default function InvoiceDetail() {
     }
   }, [showSendModal, id]);
 
+  function closeSendModal() {
+    if (!sending) {
+      setShowSendModal(false);
+      setPreviewData(null);
+    }
+  }
+
+  useDialogKeyboard(showSendModal, closeSendModal, handleSendInvoice, sending || previewLoading || !previewData);
+  useDialogKeyboard(showMarkPaidModal, () => setShowMarkPaidModal(false), handleMarkPaid);
+
   async function loadPreview() {
     setPreviewLoading(true);
     setPreviewData(null);
     try {
       const result = await api.get(`/invoices/${id}/preview`);
       setPreviewData(result);
+      setCustomSubject(result.subject);
       setCustomMessage(result.emailBody);
       setSecondaryEmail(result.recipients.secondary || '');
       setSendToSecondary(!!result.recipients.secondary);
       setAccountantMessage(result.accountant.emailBody);
+      setAccountantSubject(result.accountant.subject);
       setSendToAccountant(result.accountant.sendByDefault);
     } catch (error) {
       console.error('Failed to load preview:', error);
@@ -175,9 +190,13 @@ export default function InvoiceDetail() {
         sendToSecondary: sendToSecondary && secondaryEmail.trim() !== '',
         secondaryEmail: sendToSecondary && secondaryEmail.trim() !== '' ? secondaryEmail.trim() : undefined,
         customMessage: customMessage !== previewData?.emailBody ? customMessage : undefined,
+        customSubject: customSubject !== previewData?.subject ? customSubject : undefined,
         sendToAccountant,
         accountantMessage: sendToAccountant && accountantMessage !== previewData?.accountant.emailBody
           ? accountantMessage
+          : undefined,
+        accountantSubject: sendToAccountant && accountantSubject !== previewData?.accountant.subject
+          ? accountantSubject
           : undefined
       });
       if (sendToAccountant && !result.accountantSent) {
@@ -526,9 +545,12 @@ export default function InvoiceDetail() {
                   {/* Subject */}
                   <div className="mb-4">
                     <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">{t('detail.sendModal.subject')}</label>
-                    <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300">
-                      {previewData.subject}
-                    </div>
+                    <input
+                      type="text"
+                      value={customSubject}
+                      onChange={(e) => setCustomSubject(e.target.value)}
+                      className="input"
+                    />
                   </div>
 
                   {/* Recipients */}
@@ -605,9 +627,13 @@ export default function InvoiceDetail() {
                           <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
                             {t('detail.sendModal.accountantSubject')}
                           </label>
-                          <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300">
-                            {previewData.accountant.subject}
-                          </div>
+                          <input
+                            type="text"
+                            value={accountantSubject}
+                            onChange={(e) => setAccountantSubject(e.target.value)}
+                            className="input"
+                            disabled={!sendToAccountant}
+                          />
                         </div>
                         <div>
                           <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
@@ -711,7 +737,7 @@ interface SendMenuProps {
   variant: 'primary' | 'secondary';
   open: boolean;
   setOpen: (open: boolean) => void;
-  menuRef: React.RefObject<HTMLDivElement | null>;
+  menuRef: React.RefObject<HTMLDivElement>;
   onSendEmail: () => void;
   onDownloadAndMarkSent: () => void;
   t: (key: string) => string;

@@ -34,8 +34,10 @@ const settings = {
   smtp_from_email: 'sender@example.com',
   smtp_from_name: 'Supplier Ltd.',
   email_template: null,
+  email_subject_template: null,
   accountant_email: 'accountant@example.com',
-  accountant_email_template: 'Invoice {{invoiceNumber}} for {{clientName}}, issued {{issueDate}}.'
+  accountant_email_template: 'Invoice {{invoiceNumber}} for {{clientName}}, issued {{issueDate}}.',
+  accountant_email_subject_template: null
 };
 
 const invoice = {
@@ -110,5 +112,41 @@ describe('sendInvoiceEmail accountant forwarding', () => {
     expect(mockQuery.mock.calls.some(([sql]) =>
       String(sql).includes("'failed'")
     )).toBe(true);
+  });
+
+  it('renders saved subject templates for the client and accountant', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{
+        ...settings,
+        email_subject_template: '{{clientName}}: invoice {{invoiceNumber}} due {{dueDate}}',
+        accountant_email_subject_template: 'Book {{invoiceNumber}} / {{total}}'
+      }] })
+      .mockResolvedValueOnce({ rows: [{ language: 'en' }] })
+      .mockResolvedValueOnce({ rows: [invoice] })
+      .mockResolvedValue({ rows: [] });
+
+    await sendInvoiceEmail('invoice-1', 'user-1', 'client@example.com', null, undefined, true);
+
+    expect(mockSendMail.mock.calls[0][0].subject).toBe('Client s.r.o.: invoice INV-42 due 7/4/2026');
+    expect(mockSendMail.mock.calls[1][0].subject).toBe('Book INV-42 / 1,210.00 Kč');
+  });
+
+  it('uses one-off subject overrides when provided', async () => {
+    mockBaseQueries();
+
+    await sendInvoiceEmail(
+      'invoice-1',
+      'user-1',
+      'client@example.com',
+      null,
+      undefined,
+      true,
+      undefined,
+      'Client override',
+      'Accountant override'
+    );
+
+    expect(mockSendMail.mock.calls[0][0].subject).toBe('Client override');
+    expect(mockSendMail.mock.calls[1][0].subject).toBe('Accountant override');
   });
 });

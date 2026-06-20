@@ -3,10 +3,11 @@ import { body, validationResult } from 'express-validator';
 import { query } from '../db/init';
 import { AuthRequest } from '../middleware/auth';
 import { generateInvoicePDF } from '../services/pdfGenerator';
-import { sendInvoiceEmail } from '../services/emailSender';
+import { renderEmailTemplate, sendInvoiceEmail } from '../services/emailSender';
 import { generateSpayd, generateInvoiceNumber as renderInvoiceNumber } from '../utils/validation';
-import { t, formatDateLocale, formatCurrencyLocale } from '../i18n/translations';
+import { t } from '../i18n/translations';
 import { convertEurToCzk } from '../services/cnbExchangeRate';
+import { createZip, safeArchiveName, uniqueArchiveNames } from '../utils/zip';
 
 export const invoiceRouter: ReturnType<typeof Router> = Router();
 
@@ -179,6 +180,104 @@ invoiceRouter.get('/', async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: 'Failed to get invoices' });
   }
 });
+
+// Update list-level fields on multiple invoices at once.
+invoiceRouter.patch('/batch',
+  body('ids').isArray({ min: 1, max: 100 }),
+  body('ids.*').isUUID(),
+  body('status').optional().isIn(['draft', 'sent', 'paid', 'overdue', 'cancelled']),
+  body('accountantSent').optional().isBoolean(),
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { ids, status, accountantSent } = req.body as {
+      ids: string[];
+      status?: string;
+      accountantSent?: boolean;
+    };
+    if (status === undefined && accountantSent === undefined) {
+      return res.status(400).json({ error: 'At least one field must be updated' });
+    }
+
+    try {
+      const result = await query(
+        `UPDATE invoices
+         SET status = COALESCE($1, status),
+             paid_at = CASE
+               WHEN $1 = 'paid' THEN COALESCE(paid_at, CURRENT_TIMESTAMP)
+               WHEN $1 IS NOT NULL THEN NULL
+               ELSE paid_at
+             END,
+             accountant_email_sent_at = CASE
+               WHEN $2::boolean IS TRUE THEN COALESCE(accountant_email_sent_at, CURRENT_TIMESTAMP)
+               WHEN $2::boolean IS FALSE THEN NULL
+               ELSE accountant_email_sent_at
+             END,
+             accountant_email_sent_to = CASE
+               WHEN $2::boolean IS FALSE THEN NULL
+               ELSE accountant_email_sent_to
+             END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $3 AND id = ANY($4::uuid[])
+         RETURNING id, status, paid_at, accountant_email_sent_at, accountant_email_sent_to`,
+        [status ?? null, accountantSent ?? null, req.userId, ids]
+      );
+
+      res.json({
+        updated: result.rows.length,
+        invoices: result.rows.map(row => ({
+          id: row.id,
+          status: row.status,
+          paidAt: row.paid_at,
+          accountantEmailSentAt: row.accountant_email_sent_at,
+          accountantEmailSentTo: row.accountant_email_sent_to,
+        })),
+      });
+    } catch (error) {
+      console.error('Batch update invoices error:', error);
+      res.status(500).json({ error: 'Failed to update invoices' });
+    }
+  }
+);
+
+invoiceRouter.post('/batch-download',
+  body('ids').isArray({ min: 1, max: 50 }),
+  body('ids.*').isUUID(),
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+      const ids = [...new Set(req.body.ids as string[])];
+      const result = await query(
+        `SELECT id, invoice_number FROM invoices
+         WHERE user_id = $1 AND id = ANY($2::uuid[])
+         ORDER BY issue_date DESC, created_at DESC`,
+        [req.userId, ids]
+      );
+      if (result.rows.length === 0) return res.status(404).json({ error: 'No invoices found' });
+
+      const names = uniqueArchiveNames(result.rows.map(row =>
+        `${safeArchiveName(`invoice-${row.invoice_number}`, `invoice-${row.id}`)}.pdf`
+      ));
+      const entries = [];
+      for (let index = 0; index < result.rows.length; index += 1) {
+        const row = result.rows[index];
+        entries.push({ name: names[index], data: await generateInvoicePDF(row.id, req.userId!) });
+      }
+      const archive = createZip(entries);
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="invoices.zip"');
+      res.setHeader('Content-Length', archive.length);
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(archive);
+    } catch (error) {
+      console.error('Batch download invoices error:', error);
+      res.status(500).json({ error: 'Failed to download invoices' });
+    }
+  }
+);
 
 // Get single invoice with items
 invoiceRouter.get('/:id', async (req: AuthRequest, res: Response) => {
@@ -586,8 +685,8 @@ invoiceRouter.get('/:id/preview', async (req: AuthRequest, res: Response) => {
 
     // Get user settings for email template
     const settingsResult = await query(
-      `SELECT smtp_from_name, email_template, accountant_email,
-              accountant_email_template, accountant_send_default
+      `SELECT smtp_from_name, email_template, email_subject_template, accountant_email,
+              accountant_email_template, accountant_email_subject_template, accountant_send_default
        FROM settings WHERE user_id = $1`,
       [req.userId]
     );
@@ -600,26 +699,29 @@ invoiceRouter.get('/:id/preview', async (req: AuthRequest, res: Response) => {
     const tr = t(language).email;
 
     const template = settings.email_template || tr.defaultTemplate;
-    const emailBody = template
-      .replace(/\{\{invoiceNumber\}\}/g, invoice.invoice_number)
-      .replace(/\{\{total\}\}/g, formatCurrencyLocale(parseFloat(invoice.total), invoice.currency, language))
-      .replace(/\{\{issueDate\}\}/g, formatDateLocale(invoice.issue_date, language))
-      .replace(/\{\{dueDate\}\}/g, formatDateLocale(invoice.due_date, language))
-      .replace(/\{\{clientName\}\}/g, invoice.client_name)
-      .replace(/\{\{senderName\}\}/g, settings.smtp_from_name || tr.supplierFallback);
-
-    const subject = tr.invoiceSubject.replace('{{number}}', invoice.invoice_number);
+    const emailBody = renderEmailTemplate(template, invoice, settings, language, tr.supplierFallback);
+    const subject = renderEmailTemplate(
+      settings.email_subject_template || tr.invoiceSubject,
+      invoice,
+      settings,
+      language,
+      tr.supplierFallback
+    );
     const accountantTemplate = settings.accountant_email_template || tr.defaultAccountantTemplate;
-    const accountantEmailBody = accountantTemplate
-      .replace(/\{\{invoiceNumber\}\}/g, invoice.invoice_number)
-      .replace(/\{\{total\}\}/g, formatCurrencyLocale(parseFloat(invoice.total), invoice.currency, language))
-      .replace(/\{\{issueDate\}\}/g, formatDateLocale(invoice.issue_date, language))
-      .replace(/\{\{dueDate\}\}/g, formatDateLocale(invoice.due_date, language))
-      .replace(/\{\{clientName\}\}/g, invoice.client_name)
-      .replace(/\{\{senderName\}\}/g, settings.smtp_from_name || tr.supplierFallback);
-    const accountantSubject = tr.accountantInvoiceSubject
-      .replace('{{number}}', invoice.invoice_number)
-      .replace('{{clientName}}', invoice.client_name);
+    const accountantEmailBody = renderEmailTemplate(
+      accountantTemplate,
+      invoice,
+      settings,
+      language,
+      tr.supplierFallback
+    );
+    const accountantSubject = renderEmailTemplate(
+      settings.accountant_email_subject_template || tr.accountantInvoiceSubject,
+      invoice,
+      settings,
+      language,
+      tr.supplierFallback
+    );
 
     // Generate PDF as base64
     const pdfBuffer = await generateInvoicePDF(req.params.id as string, req.userId!);
@@ -654,16 +756,24 @@ invoiceRouter.post('/:id/send', async (req: AuthRequest, res: Response) => {
     sendToSecondary = false,
     secondaryEmail,
     customMessage,
+    customSubject,
     sendToAccountant = false,
-    accountantMessage
+    accountantMessage,
+    accountantSubject
   } = req.body;
 
   try {
     if (customMessage !== undefined && typeof customMessage !== 'string') {
       return res.status(400).json({ error: 'customMessage must be a string' });
     }
+    if (customSubject !== undefined && typeof customSubject !== 'string') {
+      return res.status(400).json({ error: 'customSubject must be a string' });
+    }
     if (accountantMessage !== undefined && typeof accountantMessage !== 'string') {
       return res.status(400).json({ error: 'accountantMessage must be a string' });
+    }
+    if (accountantSubject !== undefined && typeof accountantSubject !== 'string') {
+      return res.status(400).json({ error: 'accountantSubject must be a string' });
     }
 
     // Check invoice exists and is not draft
@@ -710,7 +820,9 @@ invoiceRouter.post('/:id/send', async (req: AuthRequest, res: Response) => {
       effectiveSecondaryEmail,
       customMessage,
       shouldSendToAccountant,
-      accountantMessage
+      accountantMessage,
+      customSubject,
+      accountantSubject
     );
 
     if (result.success) {

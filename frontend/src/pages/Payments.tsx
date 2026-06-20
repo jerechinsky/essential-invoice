@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useDialogKeyboard } from '../hooks/useDialogKeyboard';
 import { toast } from 'sonner';
 import { api } from '../utils/api';
 import { formatCurrency, formatDate } from '../utils/format';
@@ -46,6 +47,7 @@ export default function Payments() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [potentialMatches, setPotentialMatches] = useState<PotentialMatch[]>([]);
   const [matchLoading, setMatchLoading] = useState(false);
+  useDialogKeyboard(showMatchModal, () => setShowMatchModal(false));
 
   useEffect(() => {
     loadPayments();

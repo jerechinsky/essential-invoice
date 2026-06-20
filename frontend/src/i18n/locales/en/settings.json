@@ -51,9 +51,11 @@
   },
 
   "invoiceDefaults": {
-    "heading": "Invoice Defaults",
+    "heading": "Invoice and Expense Defaults",
     "vatRate": "Default VAT rate (%)",
     "paymentTerms": "Default payment terms (days)",
+    "expensePaid": "New expenses are paid by default",
+    "expensePaidHelp": "You can override this for each expense while creating it.",
     "invoiceNumberPrefix": "Invoice number prefix",
     "invoiceNumberPrefixPlaceholder": "e.g. FV, INV",
     "invoiceNumberFormat": "Invoice number format",
@@ -77,6 +79,9 @@
   "emailTemplate": {
     "heading": "Email Template",
     "variablesHelp": "Use variables: {{invoiceNumber}}, {{total}}, {{issueDate}}, {{dueDate}}, {{clientName}}, {{senderName}}",
+    "subject": "Subject template",
+    "subjectPlaceholder": "Invoice No. {{invoiceNumber}}",
+    "message": "Message template",
     "placeholder": "Hello,\n\nPlease find attached invoice #{{invoiceNumber}} for {{total}}.\n\nDue date: {{dueDate}}\n\nThank you for your cooperation.\n\nBest regards,\n{{senderName}}"
   },
 
@@ -86,6 +91,8 @@
     "email": "Accountant email",
     "emailPlaceholder": "accountant@example.com",
     "sendDefault": "Keep “Send to accountant” checked by default",
+    "subject": "Accountant subject template",
+    "subjectPlaceholder": "Invoice No. {{invoiceNumber}} – {{clientName}}",
     "template": "Accountant email template",
     "variablesHelp": "Use variables: {{invoiceNumber}}, {{total}}, {{issueDate}}, {{dueDate}}, {{clientName}}, {{senderName}}",
     "templatePlaceholder": "Hello,\n\nPlease find attached invoice No. {{invoiceNumber}}, issued on {{issueDate}} to {{clientName}}, for {{total}}.\n\nDue date: {{dueDate}}\n\nBest regards,\n{{senderName}}"

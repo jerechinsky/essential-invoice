@@ -84,12 +84,27 @@ describe('Settings Routes', () => {
       expect(values).toContain('INV');
     });
 
+    it('should update the default paid state for new expenses', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: '1' }] });
+
+      const response = await request(app)
+        .put('/settings')
+        .send({ defaultExpensePaid: false });
+
+      expect(response.status).toBe(200);
+      const [sql, values] = mockQuery.mock.calls[0];
+      expect(sql).toContain('default_expense_paid');
+      expect(values).toContain(false);
+    });
+
     it('should update accountant forwarding settings', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ id: '1' }] });
 
       const response = await request(app).put('/settings').send({
         accountantEmail: ' accountant@example.com ',
         accountantEmailTemplate: 'Invoice {{invoiceNumber}} for {{clientName}}',
+        emailSubjectTemplate: 'Invoice {{invoiceNumber}}',
+        accountantEmailSubjectTemplate: 'Invoice {{invoiceNumber}} – {{clientName}}',
         accountantSendDefault: true
       });
 
@@ -97,6 +112,8 @@ describe('Settings Routes', () => {
       const [sql, values] = mockQuery.mock.calls[0];
       expect(sql).toContain('accountant_email');
       expect(sql).toContain('accountant_email_template');
+      expect(sql).toContain('email_subject_template');
+      expect(sql).toContain('accountant_email_subject_template');
       expect(sql).toContain('accountant_send_default');
       expect(values).toContain('accountant@example.com');
       expect(values).toContain(true);
@@ -274,6 +291,7 @@ describe('Settings Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.defaultVatRate).toBe(21);
+      expect(response.body.defaultExpensePaid).toBe(true);
       expect(response.body.invoiceNumberFormat).toBe('{YYYY}{MM}{SEQ2}');
       expect(response.body.invoiceNumberStartingSequence).toBe(1);
       expect(response.body.invoiceNumberResetPeriod).toBe('monthly');

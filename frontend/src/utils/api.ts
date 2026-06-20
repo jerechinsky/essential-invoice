@@ -62,6 +62,11 @@ export const api = {
     body: data ? JSON.stringify(data) : undefined,
   }),
 
+  patch: (endpoint: string, data?: unknown) => request(endpoint, {
+    method: 'PATCH',
+    body: data ? JSON.stringify(data) : undefined,
+  }),
+
   delete: (endpoint: string, data?: unknown) => request(endpoint, {
     method: 'DELETE',
     body: data ? JSON.stringify(data) : undefined,
@@ -78,6 +83,31 @@ export const api = {
       throw new ApiError('Download failed', response.status);
     }
 
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  downloadPost: async (endpoint: string, data: unknown, filename: string) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Download failed' }));
+      throw new ApiError(error.error || 'Download failed', response.status);
+    }
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -123,6 +153,27 @@ export const api = {
       throw await uploadError(response);
     }
 
+    return response.json();
+  },
+
+  uploadFilesWithFields: async (
+    endpoint: string,
+    files: File[],
+    fields: Record<string, string>,
+    fieldName: string = 'files'
+  ) => {
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    Object.entries(fields).forEach(([key, value]) => formData.append(key, value));
+    files.forEach(file => formData.append(fieldName, file));
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    if (!response.ok) throw await uploadError(response);
     return response.json();
   },
 };

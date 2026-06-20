@@ -3,9 +3,15 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../utils/api';
 import { formatCurrency, formatDate, getStatusLabel, getStatusColor } from '../utils/format';
-import { Plus, Search, Filter, FileText, Download, Upload, X, AlertTriangle, CheckCircle, MinusCircle } from 'lucide-react';
+import { Plus, Search, Filter, FileText, Download, Upload, X, AlertTriangle, CheckCircle, MinusCircle, Pencil, FileArchive } from 'lucide-react';
 import { toast } from 'sonner';
 import RecurringInvoices from './RecurringInvoices';
+import ColumnPicker from '../components/ColumnPicker';
+import { usePersistentColumns } from '../hooks/usePersistentColumns';
+import { useRangeSelection } from '../hooks/useRangeSelection';
+import { useDialogKeyboard } from '../hooks/useDialogKeyboard';
+import DateRangeFilter from '../components/DateRangeFilter';
+import { getPresetDateRange, type DatePreset } from '../utils/dateRange';
 
 interface Invoice {
   id: string;
@@ -18,10 +24,18 @@ interface Invoice {
   clientEmail: string;
   issueDate: string;
   dueDate: string;
+  subtotal: number;
+  vatAmount: number;
   total: number;
+  notes: string | null;
+  sentAt: string | null;
+  paidAt: string | null;
   accountantEmailSentAt: string | null;
   createdAt: string;
 }
+
+type InvoiceColumn = 'number' | 'contact' | 'variableSymbol' | 'issueDate' | 'dueDate' | 'subtotal' | 'vatAmount' | 'total' | 'status' | 'notes' | 'sentAt' | 'paidAt' | 'accountant' | 'actions';
+const DEFAULT_INVOICE_COLUMNS: InvoiceColumn[] = ['number', 'contact', 'issueDate', 'dueDate', 'total', 'status', 'accountant', 'actions'];
 
 interface ImportPreview {
   totalRows: number;
@@ -47,27 +61,42 @@ export default function Invoices() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [datePreset, setDatePreset] = useState<DatePreset>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [showImport, setShowImport] = useState(false);
   const [importCsv, setImportCsv] = useState('');
   const [importFileName, setImportFileName] = useState('');
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importError, setImportError] = useState('');
   const [importLoading, setImportLoading] = useState(false);
+  const [showBatchEdit, setShowBatchEdit] = useState(false);
+  const [batchStatus, setBatchStatus] = useState('');
+  const [batchAccountant, setBatchAccountant] = useState('');
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const { visibleColumns, toggleColumn } = usePersistentColumns<InvoiceColumn>('essential-invoice.invoice-columns', DEFAULT_INVOICE_COLUMNS);
+  const selection = useRangeSelection<string>();
 
   useEffect(() => {
     if (activeTab === 'invoices') {
       loadInvoices();
     }
-  }, [statusFilter, activeTab]);
+  }, [statusFilter, activeTab, datePreset, customFrom, customTo]);
 
   async function loadInvoices() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.append('status', statusFilter);
+      const range = datePreset === 'custom' ? { from: customFrom, to: customTo } : getPresetDateRange(datePreset);
+      if (range?.from) params.append('from', range.from);
+      if (range?.to) params.append('to', range.to);
 
       const result = await api.get(`/invoices?${params}`);
       setInvoices(result);
+      const availableIds = new Set<string>(result.map((invoice: Invoice) => invoice.id));
+      selection.setSelectedIds(current => new Set([...current].filter(id => availableIds.has(id))));
     } catch (error) {
       console.error('Failed to load invoices:', error);
     } finally {
@@ -79,12 +108,72 @@ export default function Invoices() {
     invoice.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
     invoice.clientName.toLowerCase().includes(search.toLowerCase())
   );
+  const filteredIds = filteredInvoices.map(invoice => invoice.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selection.selectedIds.has(id));
+
+  const columnOptions: Array<{ id: InvoiceColumn; label: string }> = [
+    ['number', t('list.columnNumber')], ['contact', t('list.columnContact')], ['variableSymbol', t('list.columnVariableSymbol')],
+    ['issueDate', t('list.columnIssueDate')], ['dueDate', t('list.columnDueDate')], ['subtotal', t('list.columnSubtotal')],
+    ['vatAmount', t('list.columnVatAmount')], ['total', t('list.columnAmount')], ['status', t('list.columnStatus')],
+    ['notes', t('list.columnNotes')], ['sentAt', t('list.columnSentAt')], ['paidAt', t('list.columnPaidAt')],
+    ['accountant', t('list.columnAccountant')], ['actions', t('list.columnActions')],
+  ].map(([id, label]) => ({ id: id as InvoiceColumn, label }));
 
   async function handleDownloadPDF(invoiceId: string, invoiceNumber: string) {
     try {
       await api.download(`/invoices/${invoiceId}/pdf`, `${invoiceNumber}.pdf`);
     } catch (error) {
       console.error('Failed to download PDF:', error);
+    }
+  }
+
+  async function updateInvoices(ids: string[], changes: { status?: string; accountantSent?: boolean }) {
+    const result = await api.patch('/invoices/batch', { ids, ...changes });
+    const updates = new Map<string, Partial<Invoice>>(result.invoices.map((invoice: Partial<Invoice> & { id: string }) => [invoice.id, invoice]));
+    setInvoices(current => current.map(invoice => ({ ...invoice, ...(updates.get(invoice.id) || {}) })));
+    return result;
+  }
+
+  async function handleBatchUpdate() {
+    if (!batchStatus && !batchAccountant) return;
+    setBatchLoading(true);
+    try {
+      const changes: { status?: string; accountantSent?: boolean } = {};
+      if (batchStatus) changes.status = batchStatus;
+      if (batchAccountant) changes.accountantSent = batchAccountant === 'sent';
+      const result = await updateInvoices([...selection.selectedIds], changes);
+      toast.success(t('list.batchSuccess', { count: result.updated }));
+      setShowBatchEdit(false);
+      setBatchStatus('');
+      setBatchAccountant('');
+      selection.clear();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('list.batchError'));
+    } finally {
+      setBatchLoading(false);
+    }
+  }
+
+  async function handleAccountantToggle(invoice: Invoice) {
+    try {
+      await updateInvoices([invoice.id], { accountantSent: !invoice.accountantEmailSentAt });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('list.batchError'));
+    }
+  }
+
+  async function handleBatchDownload() {
+    if (selection.selectedIds.size > 50) {
+      toast.error(t('list.downloadLimit'));
+      return;
+    }
+    setDownloadLoading(true);
+    try {
+      await api.downloadPost('/invoices/batch-download', { ids: [...selection.selectedIds] }, `invoices-${new Date().toISOString().slice(0, 10)}.zip`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('list.batchDownloadError'));
+    } finally {
+      setDownloadLoading(false);
     }
   }
 
@@ -103,6 +192,13 @@ export default function Invoices() {
     setImportPreview(null);
     setImportError('');
   }
+
+  function closeBatchEdit() {
+    if (!batchLoading) setShowBatchEdit(false);
+  }
+
+  useDialogKeyboard(showImport, closeImport, importPreview ? confirmImport : previewImport, importLoading || (!importPreview ? !importCsv : importPreview.importable === 0));
+  useDialogKeyboard(showBatchEdit, closeBatchEdit, handleBatchUpdate, batchLoading || (!batchStatus && !batchAccountant));
 
   async function handleImportFile(file?: File) {
     setImportPreview(null);
@@ -226,7 +322,20 @@ export default function Invoices() {
                 <option value="cancelled">{t('common:status.cancelled')}</option>
               </select>
             </div>
+            <ColumnPicker label={t('list.columns')} options={columnOptions} visibleColumns={visibleColumns} onToggle={toggleColumn} />
           </div>
+          <DateRangeFilter preset={datePreset} from={customFrom} to={customTo} onPresetChange={setDatePreset} onFromChange={setCustomFrom} onToChange={setCustomTo} labels={{ all: t('list.dateAll'), lastMonth: t('list.dateLastMonth'), lastThreeMonths: t('list.dateLastThreeMonths'), custom: t('list.dateCustom'), from: t('list.dateFrom'), to: t('list.dateTo') }} />
+
+          {selection.selectedIds.size > 0 && (
+            <div className="flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 dark:border-indigo-800 dark:bg-indigo-900/20">
+              <span className="text-sm font-medium text-indigo-800 dark:text-indigo-200">{t('list.selectedCount', { count: selection.selectedIds.size })}</span>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={selection.clear} className="btn btn-secondary">{t('list.clearSelection')}</button>
+                <button type="button" onClick={handleBatchDownload} disabled={downloadLoading} className="btn btn-secondary flex items-center gap-2 disabled:opacity-50"><FileArchive className="h-4 w-4" />{downloadLoading ? t('list.preparingDownload') : t('list.downloadSelected')}</button>
+                <button type="button" onClick={() => setShowBatchEdit(true)} className="btn btn-primary flex items-center gap-2"><Pencil className="h-4 w-4" />{t('list.batchEdit')}</button>
+              </div>
+            </div>
+          )}
 
           {/* Invoice list */}
           {loading ? (
@@ -240,46 +349,48 @@ export default function Invoices() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-gray-200 dark:border-gray-700">
-                        <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnNumber')}</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnContact')}</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnIssueDate')}</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnDueDate')}</th>
-                        <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnAmount')}</th>
-                        <th className="text-center py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnStatus')}</th>
-                        <th className="text-center py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnAccountant')}</th>
-                        <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400">{t('list.columnActions')}</th>
+                        <th className="w-10 py-3 px-4"><input type="checkbox" aria-label={t('list.selectAll')} checked={allFilteredSelected} onChange={event => selection.selectAll(filteredIds, event.target.checked)} className="rounded border-gray-300 text-indigo-600" /></th>
+                        {columnOptions.map(column => visibleColumns.has(column.id) && <th key={column.id} className={`${['total', 'subtotal', 'vatAmount', 'actions'].includes(column.id) ? 'text-right' : ['status', 'accountant'].includes(column.id) ? 'text-center' : 'text-left'} py-3 px-4 font-medium text-gray-500 dark:text-gray-400`}>{column.label}</th>)}
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredInvoices.map((invoice) => (
-                        <tr key={invoice.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                          <td className="py-3 px-4">
+                      {filteredInvoices.map((invoice, index) => (
+                        <tr key={invoice.id} className={`border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${selection.selectedIds.has(invoice.id) ? 'bg-indigo-50/60 dark:bg-indigo-900/10' : ''}`}>
+                          <td className="py-3 px-4"><input type="checkbox" aria-label={t('list.selectInvoice', { number: invoice.invoiceNumber })} checked={selection.selectedIds.has(invoice.id)} onClick={event => selection.toggle(invoice.id, index, event.currentTarget.checked, event.shiftKey, filteredIds)} onChange={() => undefined} className="rounded border-gray-300 text-indigo-600" /></td>
+                          {visibleColumns.has('number') && <td className="py-3 px-4">
                             <Link
                               to={`/invoices/${invoice.id}`}
                               className="font-medium text-indigo-600 hover:underline"
                             >
                               {invoice.invoiceNumber}
                             </Link>
-                          </td>
-                          <td className="py-3 px-4">
+                          </td>}
+                          {visibleColumns.has('contact') && <td className="py-3 px-4">
                             <Link
                               to={`/clients/${invoice.clientId}`}
                               className="text-gray-900 dark:text-gray-100 hover:underline"
                             >
                               {invoice.clientName}
                             </Link>
-                          </td>
-                          <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{formatDate(invoice.issueDate)}</td>
-                          <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{formatDate(invoice.dueDate)}</td>
-                          <td className="py-3 px-4 text-right font-medium">
+                          </td>}
+                          {visibleColumns.has('variableSymbol') && <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{invoice.variableSymbol}</td>}
+                          {visibleColumns.has('issueDate') && <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{formatDate(invoice.issueDate)}</td>}
+                          {visibleColumns.has('dueDate') && <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{formatDate(invoice.dueDate)}</td>}
+                          {visibleColumns.has('subtotal') && <td className="py-3 px-4 text-right">{formatCurrency(invoice.subtotal, invoice.currency)}</td>}
+                          {visibleColumns.has('vatAmount') && <td className="py-3 px-4 text-right">{formatCurrency(invoice.vatAmount, invoice.currency)}</td>}
+                          {visibleColumns.has('total') && <td className="py-3 px-4 text-right font-medium">
                             {formatCurrency(invoice.total, invoice.currency)}
-                          </td>
-                          <td className="py-3 px-4 text-center">
+                          </td>}
+                          {visibleColumns.has('status') && <td className="py-3 px-4 text-center">
                             <span className={`badge ${getStatusColor(invoice.status)}`}>
                               {getStatusLabel(invoice.status)}
                             </span>
-                          </td>
-                          <td className="py-3 px-4 text-center">
+                          </td>}
+                          {visibleColumns.has('notes') && <td className="max-w-xs truncate py-3 px-4 text-gray-600 dark:text-gray-300" title={invoice.notes || ''}>{invoice.notes || '-'}</td>}
+                          {visibleColumns.has('sentAt') && <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{invoice.sentAt ? formatDate(invoice.sentAt) : '-'}</td>}
+                          {visibleColumns.has('paidAt') && <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{invoice.paidAt ? formatDate(invoice.paidAt) : '-'}</td>}
+                          {visibleColumns.has('accountant') && <td className="py-3 px-4 text-center">
+                            <button type="button" onClick={() => handleAccountantToggle(invoice)} className="rounded px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700" title={t('list.toggleAccountant')}>
                             {invoice.accountantEmailSentAt ? (
                               <span
                                 className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400"
@@ -294,8 +405,9 @@ export default function Invoices() {
                                 {t('list.accountantNotSent')}
                               </span>
                             )}
-                          </td>
-                          <td className="py-3 px-4 text-right">
+                            </button>
+                          </td>}
+                          {visibleColumns.has('actions') && <td className="py-3 px-4 text-right">
                             <button
                               onClick={() => handleDownloadPDF(invoice.id, invoice.invoiceNumber)}
                               className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg"
@@ -303,7 +415,7 @@ export default function Invoices() {
                             >
                               <Download className="h-4 w-4" />
                             </button>
-                          </td>
+                          </td>}
                         </tr>
                       ))}
                     </tbody>
@@ -396,6 +508,19 @@ export default function Invoices() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {showBatchEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="invoice-batch-title">
+          <div className="card w-full max-w-md">
+            <div className="mb-5 flex items-center justify-between"><h2 id="invoice-batch-title" className="text-lg font-semibold">{t('list.batchTitle')}</h2><button type="button" onClick={closeBatchEdit} aria-label={t('list.close')}><X className="h-5 w-5" /></button></div>
+            <div className="space-y-4">
+              <label className="block"><span className="label">{t('list.columnStatus')}</span><select value={batchStatus} onChange={event => setBatchStatus(event.target.value)} className="input"><option value="">{t('list.leaveUnchanged')}</option><option value="draft">{t('common:status.draft')}</option><option value="sent">{t('common:status.sent')}</option><option value="paid">{t('common:status.paid')}</option><option value="overdue">{t('common:status.overdue')}</option><option value="cancelled">{t('common:status.cancelled')}</option></select></label>
+              <label className="block"><span className="label">{t('list.columnAccountant')}</span><select value={batchAccountant} onChange={event => setBatchAccountant(event.target.value)} className="input"><option value="">{t('list.leaveUnchanged')}</option><option value="sent">{t('list.accountantSent')}</option><option value="notSent">{t('list.accountantNotSent')}</option></select></label>
+            </div>
+            <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={closeBatchEdit} className="btn btn-secondary">{t('import.cancel')}</button><button type="button" onClick={handleBatchUpdate} disabled={batchLoading || (!batchStatus && !batchAccountant)} className="btn btn-primary disabled:opacity-50">{batchLoading ? t('list.saving') : t('list.applyToSelected', { count: selection.selectedIds.size })}</button></div>
           </div>
         </div>
       )}

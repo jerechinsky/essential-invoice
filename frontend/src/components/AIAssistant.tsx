@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDialogKeyboard } from '../hooks/useDialogKeyboard';
 import { Sparkles, X, Send } from 'lucide-react';
 import { useAI } from '../context/AIContext';
 
@@ -9,6 +10,7 @@ export default function AIAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [question, setQuestion] = useState('');
   const [conversation, setConversation] = useState<Array<{ type: 'user' | 'assistant'; text: string }>>([]);
+  useDialogKeyboard(isOpen, () => setIsOpen(false));
 
   useEffect(() => {
     checkAIStatus();

@@ -13,7 +13,7 @@ interface SendResult {
   error?: string;
 }
 
-function renderTemplate(
+export function renderEmailTemplate(
   template: string,
   invoice: any,
   settings: any,
@@ -22,6 +22,7 @@ function renderTemplate(
 ): string {
   return template
     .replace(/\{\{invoiceNumber\}\}/g, invoice.invoice_number)
+    .replace(/\{\{number\}\}/g, invoice.invoice_number)
     .replace(/\{\{total\}\}/g, formatCurrencyLocale(parseFloat(invoice.total), invoice.currency, language))
     .replace(/\{\{issueDate\}\}/g, formatDateLocale(invoice.issue_date, language))
     .replace(/\{\{dueDate\}\}/g, formatDateLocale(invoice.due_date, language))
@@ -36,14 +37,17 @@ export async function sendInvoiceEmail(
   secondaryEmail: string | null,
   customMessage?: string,
   sendToAccountant: boolean = false,
-  accountantMessage?: string
+  accountantMessage?: string,
+  customSubject?: string,
+  accountantCustomSubject?: string
 ): Promise<SendResult> {
   try {
     // Get user settings
     const settingsResult = await query(
       `SELECT smtp_host, smtp_port, smtp_user, smtp_password, smtp_secure,
               smtp_from_email, smtp_from_name, email_template, accountant_email,
-              accountant_email_template
+              accountant_email_template, email_subject_template,
+              accountant_email_subject_template
        FROM settings WHERE user_id = $1`,
       [userId]
     );
@@ -91,9 +95,12 @@ export async function sendInvoiceEmail(
 
     // Build email content
     const template = customMessage || settings.email_template || tr.defaultTemplate;
-    const emailBody = renderTemplate(template, invoice, settings, language, tr.supplierFallback);
+    const emailBody = renderEmailTemplate(template, invoice, settings, language, tr.supplierFallback);
 
-    const subject = tr.invoiceSubject.replace('{{number}}', invoice.invoice_number);
+    const subjectTemplate = customSubject !== undefined
+      ? customSubject
+      : settings.email_subject_template || tr.invoiceSubject;
+    const subject = renderEmailTemplate(subjectTemplate, invoice, settings, language, tr.supplierFallback);
     const sentTo: string[] = [];
 
     // Send to primary email
@@ -155,16 +162,23 @@ export async function sendInvoiceEmail(
       const accountantTemplate = accountantMessage
         || settings.accountant_email_template
         || tr.defaultAccountantTemplate;
-      const accountantBody = renderTemplate(
+      const accountantBody = renderEmailTemplate(
         accountantTemplate,
         invoice,
         settings,
         language,
         tr.supplierFallback
       );
-      const accountantSubject = tr.accountantInvoiceSubject
-        .replace('{{number}}', invoice.invoice_number)
-        .replace('{{clientName}}', invoice.client_name);
+      const accountantSubjectTemplate = accountantCustomSubject !== undefined
+        ? accountantCustomSubject
+        : settings.accountant_email_subject_template || tr.accountantInvoiceSubject;
+      const accountantSubject = renderEmailTemplate(
+        accountantSubjectTemplate,
+        invoice,
+        settings,
+        language,
+        tr.supplierFallback
+      );
 
       try {
         await transporter.sendMail({

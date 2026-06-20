@@ -4,13 +4,25 @@ import multer from 'multer';
 import { query } from '../db/init';
 import { AuthRequest } from '../middleware/auth';
 import { parseAlzaInvoice, ParsedAlzaInvoice } from '../services/alzaInvoiceParser';
+import { createZip, safeArchiveName, uniqueArchiveNames } from '../utils/zip';
+import { parseUniversalInvoiceText, ParsedUniversalInvoice } from '../services/universalInvoiceParser';
 
 export const expenseRouter: ReturnType<typeof Router> = Router();
+const roundCurrency = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 const pdfUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 10 },
   fileFilter: (_req, file, callback) => {
     callback(null, file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf'));
+  },
+});
+const invoiceAttachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 10, fieldSize: 100 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    const allowedMimeTypes = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+    const allowedExtension = /\.(pdf|jpe?g|png)$/i.test(file.originalname);
+    callback(null, allowedMimeTypes.has(file.mimetype) || allowedExtension);
   },
 });
 
@@ -45,6 +57,22 @@ async function ensureAlzaSupplier(userId: string, parsed: ParsedAlzaInvoice): Pr
      RETURNING id`,
     [userId, parsed.supplier, parsed.supplierAddress, parsed.supplierIco, parsed.supplierDic,
      'Automatically created from Alza expense PDF import']
+  );
+  return created.rows[0].id;
+}
+
+async function ensureUniversalSupplier(userId: string, parsed: ParsedUniversalInvoice): Promise<string> {
+  const existing = parsed.supplierIco
+    ? await query('SELECT id FROM clients WHERE user_id = $1 AND ico = $2 LIMIT 1', [userId, parsed.supplierIco])
+    : await query('SELECT id FROM clients WHERE user_id = $1 AND LOWER(company_name) = LOWER($2) LIMIT 1', [userId, parsed.supplier]);
+  if (existing.rows[0]?.id) return existing.rows[0].id;
+
+  const created = await query(
+    `INSERT INTO clients (user_id, company_name, primary_email, address, ico, dic, notes)
+     VALUES ($1, $2, '', $3, $4, $5, $6)
+     RETURNING id`,
+    [userId, parsed.supplier, parsed.supplierAddress || '', parsed.supplierIco, parsed.supplierDic,
+     'Automatically created from universal expense invoice import']
   );
   return created.rows[0].id;
 }
@@ -94,6 +122,96 @@ expenseRouter.post('/import', pdfUpload.array('files', 10), async (req: AuthRequ
             [req.userId, alzaClientId, expenseNumber, parsed.supplierInvoiceNumber,
              parsed.currency, parsed.issueDate, parsed.dueDate, parsed.amount, parsed.vatRate,
              parsed.vatAmount, parsed.total, parsed.description, file.buffer.toString('base64'), file.originalname]
+          );
+          importedId = result.rows[0].id;
+          break;
+        } catch (error: any) {
+          if (error.code === '23505' && error.constraint === 'expenses_user_expense_number_key' && attempt < 3) continue;
+          throw error;
+        }
+      }
+
+      imported.push({
+        fileName: file.originalname,
+        id: importedId,
+        expenseNumber,
+        supplierInvoiceNumber: parsed.supplierInvoiceNumber,
+      });
+    } catch (error) {
+      failed.push({
+        fileName: file.originalname,
+        error: error instanceof Error ? error.message : 'Could not import the invoice',
+      });
+    }
+  }
+
+  res.json({ imported, failed });
+});
+
+// Import structured, user-reviewable invoice data and attach each explicitly named source file.
+expenseRouter.post('/import/universal', invoiceAttachmentUpload.array('files', 10), async (req: AuthRequest, res: Response) => {
+  const files = req.files as Express.Multer.File[] | undefined;
+  if (!files?.length) return res.status(400).json({ error: 'At least one invoice file is required' });
+  if (typeof req.body.data !== 'string' || !req.body.data.trim()) {
+    return res.status(400).json({ error: 'Structured invoice text is required' });
+  }
+
+  let parsedInvoices: ParsedUniversalInvoice[];
+  try {
+    parsedInvoices = parseUniversalInvoiceText(req.body.data);
+  } catch (error) {
+    return res.status(422).json({ error: error instanceof Error ? error.message : 'Could not parse the invoice text' });
+  }
+
+  const filesByName = new Map<string, Express.Multer.File>();
+  for (const file of files) {
+    if (filesByName.has(file.originalname)) {
+      return res.status(422).json({ error: `The file ${file.originalname} was uploaded more than once` });
+    }
+    filesByName.set(file.originalname, file);
+  }
+  const describedNames = new Set(parsedInvoices.map(invoice => invoice.fileName));
+  const missingFiles = parsedInvoices.filter(invoice => !filesByName.has(invoice.fileName)).map(invoice => invoice.fileName);
+  const extraFiles = files.filter(file => !describedNames.has(file.originalname)).map(file => file.originalname);
+  if (missingFiles.length || extraFiles.length) {
+    const details = [
+      missingFiles.length ? `Missing files: ${missingFiles.join(', ')}` : '',
+      extraFiles.length ? `Files without invoice data: ${extraFiles.join(', ')}` : '',
+    ].filter(Boolean).join('. ');
+    return res.status(422).json({ error: details });
+  }
+
+  const imported: Array<{ fileName: string; id: string; expenseNumber: string; supplierInvoiceNumber: string }> = [];
+  const failed: Array<{ fileName: string; error: string }> = [];
+
+  for (const parsed of parsedInvoices) {
+    const file = filesByName.get(parsed.fileName)!;
+    try {
+      const supplierId = await ensureUniversalSupplier(req.userId!, parsed);
+      const duplicate = await query(
+        `SELECT id FROM expenses
+         WHERE user_id = $1 AND client_id = $2 AND supplier_invoice_number = $3
+         LIMIT 1`,
+        [req.userId, supplierId, parsed.supplierInvoiceNumber]
+      );
+      if (duplicate.rows.length) throw new Error(`Invoice ${parsed.supplierInvoiceNumber} has already been imported for this supplier`);
+
+      let expenseNumber = '';
+      let importedId = '';
+      for (let attempt = 0; attempt <= 3; attempt += 1) {
+        expenseNumber = await generateExpenseNumber(req.userId!, parsed.issueDate, attempt);
+        try {
+          const result = await query(
+            `INSERT INTO expenses (user_id, client_id, expense_number, supplier_invoice_number,
+             status, currency, issue_date, due_date, amount, vat_rate, vat_amount, total,
+             description, notes, file_data, file_name, file_mime_type, paid_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+             CASE WHEN $5 = 'paid' THEN CURRENT_TIMESTAMP ELSE NULL END)
+             RETURNING id`,
+            [req.userId, supplierId, expenseNumber, parsed.supplierInvoiceNumber,
+             parsed.paid ? 'paid' : 'unpaid', parsed.currency, parsed.issueDate, parsed.dueDate,
+             parsed.amount, parsed.vatRate, parsed.vatAmount, parsed.total, parsed.description,
+             parsed.notes, file.buffer.toString('base64'), file.originalname, file.mimetype]
           );
           importedId = result.rows[0].id;
           break;
@@ -193,6 +311,74 @@ expenseRouter.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Update list-level fields on multiple expenses at once.
+expenseRouter.patch('/batch',
+  body('ids').isArray({ min: 1, max: 100 }),
+  body('ids.*').isUUID(),
+  body('status').isIn(['unpaid', 'paid']),
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { ids, status } = req.body as { ids: string[]; status: 'unpaid' | 'paid' };
+    try {
+      const result = await query(
+        `UPDATE expenses
+         SET status = $1,
+             paid_at = CASE WHEN $1 = 'paid' THEN COALESCE(paid_at, CURRENT_TIMESTAMP) ELSE NULL END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $2 AND id = ANY($3::uuid[])
+         RETURNING id, status, paid_at`,
+        [status, req.userId, ids]
+      );
+      res.json({
+        updated: result.rows.length,
+        expenses: result.rows.map(row => ({ id: row.id, status: row.status, paidAt: row.paid_at })),
+      });
+    } catch (error) {
+      console.error('Batch update expenses error:', error);
+      res.status(500).json({ error: 'Failed to update expenses' });
+    }
+  }
+);
+
+expenseRouter.post('/batch-download',
+  body('ids').isArray({ min: 1, max: 50 }),
+  body('ids.*').isUUID(),
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+      const ids = [...new Set(req.body.ids as string[])];
+      const result = await query(
+        `SELECT id, expense_number, file_data, file_name
+         FROM expenses
+         WHERE user_id = $1 AND id = ANY($2::uuid[]) AND file_data IS NOT NULL
+         ORDER BY issue_date DESC, created_at DESC`,
+        [req.userId, ids]
+      );
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Selected expenses have no attachments' });
+
+      const names = uniqueArchiveNames(result.rows.map(row =>
+        safeArchiveName(row.file_name || `${row.expense_number}.pdf`, `${row.expense_number}.pdf`)
+      ));
+      const archive = createZip(result.rows.map((row, index) => ({
+        name: names[index],
+        data: Buffer.from(row.file_data, 'base64'),
+      })));
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="expense-documents.zip"');
+      res.setHeader('Content-Length', archive.length);
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(archive);
+    } catch (error) {
+      console.error('Batch download expenses error:', error);
+      res.status(500).json({ error: 'Failed to download expense documents' });
+    }
+  }
+);
+
 // Get single expense
 expenseRouter.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -257,11 +443,12 @@ expenseRouter.post('/',
     return true;
   }),
   body('vatRate').optional().isNumeric(),
-  body('vatAmount').optional().isNumeric(),
+  body('vatAmount').optional().isFloat({ min: 0 }),
   body('total').optional().isNumeric().custom((value) => {
     if (parseFloat(value) <= 0) throw new Error('Total must be greater than 0');
     return true;
   }),
+  body('paid').optional().isBoolean(),
   body('currency').optional().isIn(['CZK', 'EUR']),
   body('clientId').optional({ values: 'falsy' }).isUUID(),
   body('supplierInvoiceNumber').optional().isLength({ max: 100 }),
@@ -277,7 +464,7 @@ expenseRouter.post('/',
     const {
       clientId, issueDate, dueDate, deliveryDate, currency = 'CZK',
       amount, vatRate = 21, vatAmount: suppliedVatAmount, total: suppliedTotal, supplierInvoiceNumber,
-      description, notes, fileData, fileName, fileMimeType
+      description, notes, fileData, fileName, fileMimeType, paid = true
     } = req.body;
 
     try {
@@ -294,8 +481,11 @@ expenseRouter.post('/',
 
       const vatAmount = suppliedVatAmount !== undefined
         ? parseFloat(suppliedVatAmount)
-        : parseFloat(amount) * (parseFloat(vatRate) / 100);
-      const total = suppliedTotal !== undefined ? parseFloat(suppliedTotal) : parseFloat(amount) + vatAmount;
+        : roundCurrency(parseFloat(amount) * (parseFloat(vatRate) / 100));
+      const total = suppliedTotal !== undefined ? parseFloat(suppliedTotal) : roundCurrency(parseFloat(amount) + vatAmount);
+      if (total < parseFloat(amount) || vatAmount < 0) {
+        return res.status(400).json({ error: 'Total cannot be lower than amount' });
+      }
 
       // Retry loop to handle race conditions with expense number generation
       const MAX_RETRIES = 3;
@@ -309,10 +499,11 @@ expenseRouter.post('/',
              status, currency, issue_date, due_date, delivery_date,
              amount, vat_rate, vat_amount, total,
              description, notes, file_data, file_name, file_mime_type, paid_at)
-             VALUES ($1, $2, $3, $4, 'paid', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+               CASE WHEN $5 = 'paid' THEN CURRENT_TIMESTAMP ELSE NULL END)
              RETURNING *`,
             [req.userId, clientId || null, expenseNumber, supplierInvoiceNumber || null,
-             currency, issueDate, dueDate, deliveryDate || null,
+             paid ? 'paid' : 'unpaid', currency, issueDate, dueDate, deliveryDate || null,
              amount, vatRate, vatAmount, total,
              description || null, notes || null,
              fileData || null, fileName || null, fileMimeType || null]
@@ -353,6 +544,11 @@ expenseRouter.put('/:id',
     return true;
   }),
   body('vatRate').optional().isNumeric(),
+  body('vatAmount').optional().isFloat({ min: 0 }),
+  body('total').optional().isNumeric().custom((value) => {
+    if (parseFloat(value) <= 0) throw new Error('Total must be greater than 0');
+    return true;
+  }),
   body('currency').optional().isIn(['CZK', 'EUR']),
   body('clientId').optional({ values: 'falsy' }).isUUID(),
   body('supplierInvoiceNumber').optional({ values: 'null' }).isLength({ max: 100 }),
@@ -366,7 +562,8 @@ expenseRouter.put('/:id',
     }
 
     try {
-      // Check expense exists and is unpaid
+      // Paid expenses must remain editable: most received invoices are recorded
+      // after payment, and their payment status is independent of their details.
       const expenseCheck = await query(
         'SELECT status FROM expenses WHERE id = $1 AND user_id = $2',
         [req.params.id, req.userId]
@@ -376,13 +573,9 @@ expenseRouter.put('/:id',
         return res.status(404).json({ error: 'Expense not found' });
       }
 
-      if (expenseCheck.rows[0].status !== 'unpaid') {
-        return res.status(400).json({ error: 'Can only edit unpaid expenses' });
-      }
-
       const {
         clientId, issueDate, dueDate, deliveryDate, currency,
-        amount, vatRate, supplierInvoiceNumber,
+        amount, vatRate, vatAmount: suppliedVatAmount, total: suppliedTotal, supplierInvoiceNumber,
         description, notes, fileData, fileName, fileMimeType
       } = req.body;
 
@@ -397,19 +590,31 @@ expenseRouter.put('/:id',
         }
       }
 
-      // Recalculate VAT if amount or rate changed
+      // Recalculate linked amounts. When an explicit gross total is supplied,
+      // preserve it and derive VAT from the difference (important for rounding).
       let vatAmount = null;
       let total = null;
-      if (amount !== undefined || vatRate !== undefined) {
+      if (amount !== undefined || vatRate !== undefined || suppliedVatAmount !== undefined || suppliedTotal !== undefined) {
         // Need to get current values for any not provided
         const current = await query(
-          'SELECT amount, vat_rate FROM expenses WHERE id = $1',
-          [req.params.id]
+          'SELECT amount, vat_rate, vat_amount, total FROM expenses WHERE id = $1 AND user_id = $2',
+          [req.params.id, req.userId]
         );
         const currentAmount = amount !== undefined ? parseFloat(amount) : parseFloat(current.rows[0].amount);
         const currentVatRate = vatRate !== undefined ? parseFloat(vatRate) : parseFloat(current.rows[0].vat_rate);
-        vatAmount = currentAmount * (currentVatRate / 100);
-        total = currentAmount + vatAmount;
+        if (suppliedTotal !== undefined) {
+          total = parseFloat(suppliedTotal);
+          vatAmount = suppliedVatAmount !== undefined ? parseFloat(suppliedVatAmount) : roundCurrency(total - currentAmount);
+        } else if (suppliedVatAmount !== undefined) {
+          vatAmount = parseFloat(suppliedVatAmount);
+          total = roundCurrency(currentAmount + vatAmount);
+        } else {
+          vatAmount = roundCurrency(currentAmount * (currentVatRate / 100));
+          total = roundCurrency(currentAmount + vatAmount);
+        }
+        if (total < currentAmount || vatAmount < 0) {
+          return res.status(400).json({ error: 'Total cannot be lower than amount' });
+        }
       }
 
       const result = await query(

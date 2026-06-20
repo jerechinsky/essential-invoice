@@ -54,9 +54,12 @@ const defaultSettings = {
   invoicePdfTemplate: 'classic',
   defaultVatRate: 21,
   defaultPaymentTerms: 14,
+  defaultExpensePaid: true,
   emailTemplate: null,
+  emailSubjectTemplate: null,
   accountantEmail: null,
   accountantEmailTemplate: null,
+  accountantEmailSubjectTemplate: null,
   accountantSendDefault: false,
   calculatorEnabled: false,
   perplexityApiKeySet: false
@@ -118,6 +121,42 @@ describe('Settings Component', () => {
     });
   });
 
+  it('should load and save client and accountant subject templates', async () => {
+    mockGet.mockResolvedValueOnce({
+      ...defaultSettings,
+      emailSubjectTemplate: 'Invoice {{invoiceNumber}} for {{clientName}}',
+      accountantEmailSubjectTemplate: 'Book {{invoiceNumber}}'
+    });
+    mockPut.mockResolvedValueOnce({ message: 'Settings updated successfully' });
+    mockGet.mockResolvedValueOnce(defaultSettings);
+
+    render(<Settings />);
+
+    await waitFor(() => {
+      expect(document.querySelector('input[name="emailSubjectTemplate"]')).toBeTruthy();
+    });
+    const clientSubject = document.querySelector(
+      'input[name="emailSubjectTemplate"]'
+    ) as HTMLInputElement;
+    const accountantSubject = document.querySelector(
+      'input[name="accountantEmailSubjectTemplate"]'
+    ) as HTMLInputElement;
+
+    expect(clientSubject.value).toBe('Invoice {{invoiceNumber}} for {{clientName}}');
+    expect(accountantSubject.value).toBe('Book {{invoiceNumber}}');
+
+    fireEvent.change(clientSubject, { target: { value: 'Updated {{invoiceNumber}}' } });
+    fireEvent.change(accountantSubject, { target: { value: 'Archive {{invoiceNumber}}' } });
+    fireEvent.click(screen.getByRole('button', { name: /uložit nastavení/i }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith('/settings', expect.objectContaining({
+        emailSubjectTemplate: 'Updated {{invoiceNumber}}',
+        accountantEmailSubjectTemplate: 'Archive {{invoiceNumber}}'
+      }));
+    });
+  });
+
   it('should not render paušální daň section', async () => {
     mockGet.mockResolvedValueOnce(defaultSettings);
 
@@ -149,6 +188,26 @@ describe('Settings Component', () => {
       expect(mockPut).toHaveBeenCalledWith('/settings', expect.objectContaining({
         invoicePdfTemplate: 'minimalistic'
       }));
+    });
+  });
+
+  it('should load and save the default paid state for expenses', async () => {
+    mockGet.mockResolvedValueOnce({ ...defaultSettings, defaultExpensePaid: false });
+    mockPut.mockResolvedValueOnce({ message: 'Settings updated successfully' });
+    mockGet.mockResolvedValueOnce({ ...defaultSettings, defaultExpensePaid: true });
+
+    render(<Settings />);
+
+    const checkbox = await waitFor(() => {
+      const element = document.querySelector('input[name="defaultExpensePaid"]') as HTMLInputElement;
+      expect(element).not.toBeChecked();
+      return element;
+    });
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole('button', { name: /uložit nastavení/i }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith('/settings', expect.objectContaining({ defaultExpensePaid: true }));
     });
   });
 

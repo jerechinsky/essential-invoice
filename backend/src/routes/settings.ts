@@ -36,9 +36,12 @@ settingsRouter.get('/', async (req: AuthRequest, res: Response) => {
         invoicePdfTemplate: 'classic',
         defaultVatRate: 21,
         defaultPaymentTerms: 14,
+        defaultExpensePaid: true,
         emailTemplate: null,
+        emailSubjectTemplate: null,
         accountantEmail: null,
         accountantEmailTemplate: null,
+        accountantEmailSubjectTemplate: null,
         accountantSendDefault: false,
         calculatorEnabled: false,
         aiEnabled: true,
@@ -69,9 +72,12 @@ settingsRouter.get('/', async (req: AuthRequest, res: Response) => {
       invoicePdfTemplate: settings.invoice_pdf_template || 'classic',
       defaultVatRate: parseFloat(settings.default_vat_rate),
       defaultPaymentTerms: settings.default_payment_terms,
+      defaultExpensePaid: settings.default_expense_paid ?? true,
       emailTemplate: settings.email_template,
+      emailSubjectTemplate: settings.email_subject_template,
       accountantEmail: settings.accountant_email,
       accountantEmailTemplate: settings.accountant_email_template,
+      accountantEmailSubjectTemplate: settings.accountant_email_subject_template,
       accountantSendDefault: settings.accountant_send_default ?? false,
       calculatorEnabled: settings.calculator_enabled ?? false,
       aiEnabled: settings.ai_enabled ?? true,
@@ -90,10 +96,12 @@ settingsRouter.put('/', async (req: AuthRequest, res: Response) => {
     imapHost, imapPort, imapUser, imapPassword, imapTls,
     bankNotificationEmail, emailPollingInterval,
     invoiceNumberPrefix, invoiceNumberFormat, invoiceNumberStartingSequence, invoiceNumberResetPeriod, invoicePdfTemplate,
-    defaultVatRate, defaultPaymentTerms,
+    defaultVatRate, defaultPaymentTerms, defaultExpensePaid,
     emailTemplate,
+    emailSubjectTemplate,
     accountantEmail,
     accountantEmailTemplate,
+    accountantEmailSubjectTemplate,
     accountantSendDefault,
     calculatorEnabled,
     aiEnabled,
@@ -138,9 +146,12 @@ settingsRouter.put('/', async (req: AuthRequest, res: Response) => {
     }
     addUpdate('default_vat_rate', defaultVatRate);
     addUpdate('default_payment_terms', defaultPaymentTerms);
+    addUpdate('default_expense_paid', defaultExpensePaid);
     addUpdate('email_template', emailTemplate);
+    addUpdate('email_subject_template', emailSubjectTemplate);
     addUpdate('accountant_email', typeof accountantEmail === 'string' ? accountantEmail.trim() || null : accountantEmail);
     addUpdate('accountant_email_template', accountantEmailTemplate);
+    addUpdate('accountant_email_subject_template', accountantEmailSubjectTemplate);
     addUpdate('accountant_send_default', accountantSendDefault);
     addUpdate('calculator_enabled', calculatorEnabled);
     addUpdate('ai_enabled', aiEnabled);

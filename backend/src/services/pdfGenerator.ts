@@ -870,8 +870,15 @@ export async function generateInvoicePDF(invoiceId: string, userId: string): Pro
     ? buildMinimalisticDocumentDefinition(invoiceData, qrCodeDataUrl)
     : buildClassicDocumentDefinition(invoiceData, qrCodeDataUrl);
 
-  // Generate PDF buffer (pdfmake 0.3+ returns a Promise from getBuffer)
+  // Support both callback-based and Promise-based pdfmake builds.
   const pdf = pdfmake.createPdf(docDefinition);
-  const buffer: Uint8Array = await pdf.getBuffer();
+  const buffer = await new Promise<Uint8Array>((resolve, reject) => {
+    try {
+      const result = pdf.getBuffer((value: Uint8Array) => resolve(value));
+      if (result && typeof result.then === 'function') result.then(resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+  });
   return Buffer.from(buffer);
 }

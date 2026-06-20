@@ -101,6 +101,7 @@ essential-invoice/
 │   │   │   ├── emailSender.ts       # Per-user SMTP for invoices
 │   │   │   ├── globalEmailSender.ts  # Global SMTP for system emails
 │   │   │   ├── pdfGenerator.ts       # Uses pdfmake library
+│   │   │   ├── universalInvoiceParser.ts # Structured multi-invoice expense imports
 │   │   │   └── perplexityAI.ts
 │   │   ├── scripts/          # Admin CLI scripts (delete-user.ts)
 │   │   ├── utils/           # Validation utilities (IČO, IBAN, SPAYD)

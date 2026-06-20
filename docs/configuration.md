@@ -39,6 +39,10 @@ The preference affects:
 
 The `GET /auth/me` endpoint returns the `language` field; `PUT /auth/me` accepts it to update the preference.
 
+## Invoice and Expense Defaults (In-App)
+
+Settings controls the default VAT rate and payment terms for invoices, plus whether newly created expenses start as already paid. The paid state can be overridden on each new expense. In the expense form, changing the issue date moves the due date to 14 days later, and net and VAT-inclusive amount fields remain synchronized in either direction.
+
 ## SMTP Configuration (In-App)
 
 Configure per-user email sending in Settings > Email (SMTP):
@@ -47,11 +51,13 @@ Configure per-user email sending in Settings > Email (SMTP):
 - Username and password
 - Sender email and name
 
+The client email subject and message can be customized independently in Settings. Both fields support `{{invoiceNumber}}`, `{{total}}`, `{{issueDate}}`, `{{dueDate}}`, `{{clientName}}`, and `{{senderName}}`. They can also be adjusted for a single delivery in the invoice send dialog.
+
 ### Accountant forwarding
 
-In Settings, add the accountant email, customize the accountant message template, and choose whether **Send to accountant** is checked by default. Available placeholders are `{{invoiceNumber}}`, `{{total}}`, `{{issueDate}}`, `{{dueDate}}`, `{{clientName}}`, and `{{senderName}}`.
+In Settings, add the accountant email, customize the accountant subject and message templates, and choose whether **Send to accountant** is checked by default. The same placeholders as the client templates are available.
 
-The invoice send dialog shows the accountant address and a separate editable message. Successful delivery records the date and recipient address on the invoice. Recurring invoices with auto-send enabled also forward to the accountant when the default checkbox preference is enabled.
+The invoice send dialog shows the accountant address with a separately editable subject and message. Successful delivery records the date and recipient address on the invoice. Recurring invoices with auto-send enabled also forward to the accountant when the default checkbox preference is enabled.
 
 ## IMAP Configuration (In-App)
 

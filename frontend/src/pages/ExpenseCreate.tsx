@@ -32,6 +32,39 @@ interface ExactAmounts {
   total: number;
 }
 
+interface ExpenseFormData {
+  clientId: string;
+  supplierInvoiceNumber: string;
+  issueDate: string;
+  dueDate: string;
+  currency: string;
+  amount: number | '';
+  total: number | '';
+  vatRate: number;
+  paid: boolean;
+  description: string;
+  notes: string;
+}
+
+function addDays(date: string, days: number): string {
+  if (!date) return '';
+  const [year, month, day] = date.split('-').map(Number);
+  const result = new Date(Date.UTC(year, month - 1, day));
+  result.setUTCDate(result.getUTCDate() + days);
+  return result.toISOString().split('T')[0];
+}
+
+function roundCurrency(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function localDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function ExpenseCreate() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -43,15 +76,20 @@ export default function ExpenseCreate() {
   const [saving, setSaving] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [exactAmounts, setExactAmounts] = useState<ExactAmounts | null>(null);
+  const [lastAmountField, setLastAmountField] = useState<'amount' | 'total'>('amount');
 
-  const [formData, setFormData] = useState({
+  const today = localDateString(new Date());
+
+  const [formData, setFormData] = useState<ExpenseFormData>({
     clientId: '',
     supplierInvoiceNumber: '',
-    issueDate: new Date().toISOString().split('T')[0],
-    dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    issueDate: today,
+    dueDate: addDays(today, 14),
     currency: 'CZK',
-    amount: '' as unknown as number,
+    amount: '',
+    total: '',
     vatRate: 21,
+    paid: true,
     description: '',
     notes: '',
   });
@@ -66,7 +104,10 @@ export default function ExpenseCreate() {
 
   async function loadData() {
     try {
-      const clientsData = await api.get('/clients');
+      const [clientsData, settings] = await Promise.all([
+        api.get('/clients'),
+        isEdit ? Promise.resolve(null) : api.get('/settings'),
+      ]);
       setClients(clientsData);
 
       if (isEdit) {
@@ -78,7 +119,9 @@ export default function ExpenseCreate() {
           dueDate: expense.dueDate.split('T')[0],
           currency: expense.currency,
           amount: expense.amount,
+          total: expense.total,
           vatRate: expense.vatRate,
+          paid: expense.status === 'paid',
           description: expense.description || '',
           notes: expense.notes || '',
         });
@@ -93,6 +136,12 @@ export default function ExpenseCreate() {
           setFileName(expense.fileName);
           setFileMimeType(expense.fileMimeType);
         }
+      } else if (settings) {
+        setFormData(previous => ({
+          ...previous,
+          vatRate: settings.defaultVatRate ?? previous.vatRate,
+          paid: settings.defaultExpensePaid ?? true,
+        }));
       }
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -102,9 +151,49 @@ export default function ExpenseCreate() {
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
-    const { name, value } = e.target;
-    if (name === 'amount' || name === 'vatRate') setExactAmounts(null);
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    if (name === 'issueDate') {
+      setFormData(previous => ({ ...previous, issueDate: value, dueDate: addDays(value, 14) }));
+      return;
+    }
+    if (name === 'paid' && type === 'checkbox') {
+      setFormData(previous => ({ ...previous, paid: (e.target as HTMLInputElement).checked }));
+      return;
+    }
+    if (name === 'amount') {
+      setExactAmounts(null);
+      setLastAmountField('amount');
+      const amount = value === '' ? '' : Number(value);
+      const total = value === '' ? '' : roundCurrency(Number(value) * (1 + Number(formData.vatRate) / 100));
+      setFormData(previous => ({ ...previous, amount, total }));
+      return;
+    }
+    if (name === 'total') {
+      setExactAmounts(null);
+      setLastAmountField('total');
+      const total = value === '' ? '' : Number(value);
+      const amount = value === '' ? '' : roundCurrency(Number(value) / (1 + Number(formData.vatRate) / 100));
+      setFormData(previous => ({ ...previous, amount, total }));
+      return;
+    }
+    if (name === 'vatRate') {
+      setExactAmounts(null);
+      const vatRate = Number(value);
+      setFormData(previous => {
+        if (lastAmountField === 'total') {
+          const amount = previous.total === ''
+            ? previous.amount
+            : roundCurrency(Number(previous.total) / (1 + vatRate / 100));
+          return { ...previous, vatRate, amount };
+        }
+        const total = previous.amount === ''
+          ? previous.total
+          : roundCurrency(Number(previous.amount) * (1 + vatRate / 100));
+        return { ...previous, vatRate, total };
+      });
+      return;
+    }
+    setFormData(previous => ({ ...previous, [name]: value }));
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -144,6 +233,7 @@ export default function ExpenseCreate() {
           dueDate: parsed.dueDate,
           currency: parsed.currency,
           amount: parsed.amount,
+          total: parsed.total,
           vatRate: parsed.vatRate,
           description: parsed.description,
         }));
@@ -172,14 +262,14 @@ export default function ExpenseCreate() {
     if (exactAmounts && exactAmounts.amount === Number(formData.amount) && exactAmounts.vatRate === Number(formData.vatRate)) {
       return exactAmounts.vatAmount;
     }
-    return Number(formData.amount) * (Number(formData.vatRate) / 100);
+    return roundCurrency(Number(formData.total) - Number(formData.amount));
   }
 
   function calculateTotal(): number {
     if (exactAmounts && exactAmounts.amount === Number(formData.amount) && exactAmounts.vatRate === Number(formData.vatRate)) {
       return exactAmounts.total;
     }
-    return Number(formData.amount) + calculateVatAmount();
+    return Number(formData.total);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -201,7 +291,9 @@ export default function ExpenseCreate() {
         currency: formData.currency,
         amount: Number(formData.amount),
         vatRate: Number(formData.vatRate),
-        ...(!isEdit && { vatAmount: calculateVatAmount(), total: calculateTotal() }),
+        vatAmount: calculateVatAmount(),
+        total: calculateTotal(),
+        ...(!isEdit && { paid: formData.paid }),
         description: formData.description || null,
         notes: formData.notes || null,
         fileData,
@@ -350,6 +442,20 @@ export default function ExpenseCreate() {
               />
             </div>
             <div>
+              <label htmlFor="total" className="label">{t('create.amount.totalWithVat')}</label>
+              <input
+                type="number"
+                id="total"
+                name="total"
+                value={formData.total}
+                onChange={handleChange}
+                className="input"
+                min="0.01"
+                step="0.01"
+                required
+              />
+            </div>
+            <div>
               <label htmlFor="vatRate" className="label">{t('create.amount.vatRate')}</label>
               <select
                 id="vatRate"
@@ -382,6 +488,22 @@ export default function ExpenseCreate() {
             </div>
           </div>
         </div>
+
+        {!isEdit && (
+          <div className="card">
+            <label className="flex items-center space-x-3">
+              <input
+                type="checkbox"
+                name="paid"
+                checked={formData.paid}
+                onChange={handleChange}
+                className="rounded border-gray-300 text-indigo-600"
+              />
+              <span className="font-medium text-gray-900 dark:text-gray-100">{t('create.details.alreadyPaid')}</span>
+            </label>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 ml-6">{t('create.details.alreadyPaidHelp')}</p>
+          </div>
+        )}
 
         {/* File attachment */}
         <div className="card">

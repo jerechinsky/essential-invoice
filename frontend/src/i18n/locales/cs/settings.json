@@ -51,9 +51,11 @@
   },
 
   "invoiceDefaults": {
-    "heading": "Výchozí hodnoty faktur",
+    "heading": "Výchozí hodnoty faktur a nákladů",
     "vatRate": "Výchozí sazba DPH (%)",
     "paymentTerms": "Výchozí splatnost (dny)",
+    "expensePaid": "Nové náklady jsou ve výchozím stavu zaplacené",
+    "expensePaidHelp": "Při vytváření každého nákladu lze tuto volbu změnit.",
     "invoiceNumberPrefix": "Prefix čísla faktury",
     "invoiceNumberPrefixPlaceholder": "Např. FV, INV",
     "invoiceNumberFormat": "Formát čísla faktury",
@@ -77,6 +79,9 @@
   "emailTemplate": {
     "heading": "Šablona emailu",
     "variablesHelp": "Použijte proměnné: {{invoiceNumber}}, {{total}}, {{issueDate}}, {{dueDate}}, {{clientName}}, {{senderName}}",
+    "subject": "Šablona předmětu",
+    "subjectPlaceholder": "Faktura č. {{invoiceNumber}}",
+    "message": "Šablona zprávy",
     "placeholder": "Dobrý den,\n\nv příloze Vám zasílám fakturu č. {{invoiceNumber}} na částku {{total}}.\n\nDatum splatnosti: {{dueDate}}\n\nDěkuji za spolupráci.\n\nS pozdravem,\n{{senderName}}"
   },
 
@@ -86,6 +91,8 @@
     "email": "E-mail účetního",
     "emailPlaceholder": "ucetni@example.com",
     "sendDefault": "Ve výchozím nastavení zaškrtnout „Odeslat účetnímu“",
+    "subject": "Šablona předmětu pro účetní",
+    "subjectPlaceholder": "Faktura č. {{invoiceNumber}} – {{clientName}}",
     "template": "Šablona e-mailu pro účetní",
     "variablesHelp": "Použijte proměnné: {{invoiceNumber}}, {{total}}, {{issueDate}}, {{dueDate}}, {{clientName}}, {{senderName}}",
     "templatePlaceholder": "Dobrý den,\n\nv příloze zasílám fakturu č. {{invoiceNumber}}, vystavenou dne {{issueDate}} pro společnost {{clientName}}, na částku {{total}}.\n\nDatum splatnosti: {{dueDate}}\n\nS pozdravem,\n{{senderName}}"

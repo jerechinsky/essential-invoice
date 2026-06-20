@@ -157,9 +157,12 @@ export async function initializeDatabase() {
         invoice_pdf_template VARCHAR(20) DEFAULT 'classic',
         default_vat_rate DECIMAL(5, 2) DEFAULT 21,
         default_payment_terms INTEGER DEFAULT 14,
+        default_expense_paid BOOLEAN DEFAULT true,
         email_template TEXT,
+        email_subject_template TEXT,
         accountant_email VARCHAR(255),
         accountant_email_template TEXT,
+        accountant_email_subject_template TEXT,
         accountant_send_default BOOLEAN DEFAULT false,
         calculator_enabled BOOLEAN DEFAULT false,
         ai_enabled BOOLEAN DEFAULT true,
@@ -330,6 +333,18 @@ export async function initializeDatabase() {
         END IF;
       END $$;
 
+      -- Existing installations created expenses as paid by default. Preserve that
+      -- behavior while allowing each user to choose a different form default.
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'settings' AND column_name = 'default_expense_paid'
+        ) THEN
+          ALTER TABLE settings ADD COLUMN default_expense_paid BOOLEAN DEFAULT true;
+        END IF;
+      END $$;
+
       -- Add exchange rate columns to invoices table
       DO $$
       BEGIN
@@ -381,6 +396,18 @@ export async function initializeDatabase() {
           WHERE table_name = 'settings' AND column_name = 'accountant_email_template'
         ) THEN
           ALTER TABLE settings ADD COLUMN accountant_email_template TEXT;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'settings' AND column_name = 'email_subject_template'
+        ) THEN
+          ALTER TABLE settings ADD COLUMN email_subject_template TEXT;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'settings' AND column_name = 'accountant_email_subject_template'
+        ) THEN
+          ALTER TABLE settings ADD COLUMN accountant_email_subject_template TEXT;
         END IF;
         IF NOT EXISTS (
           SELECT 1 FROM information_schema.columns

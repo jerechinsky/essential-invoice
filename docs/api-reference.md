@@ -34,12 +34,14 @@ The profile payload includes company invoicing fields such as `companyName`, `co
 - `GET /api/invoices/:id/pdf` - Download PDF
 - `POST /api/invoices` - Create invoice
 - `PUT /api/invoices/:id` - Update invoice
+- `PATCH /api/invoices/batch` - Update `status` and/or `accountantSent` on up to 100 selected invoices. Body: `{ ids: UUID[], status?: "draft" | "sent" | "paid" | "overdue" | "cancelled", accountantSent?: boolean }`
+- `POST /api/invoices/batch-download` - Generate PDFs for up to 50 selected invoices and return one ZIP archive. Body: `{ ids: UUID[] }`
 - `DELETE /api/invoices/:id` - Delete draft invoice
-- `POST /api/invoices/:id/send` - Send via email. Optional body fields `sendToAccountant` and `accountantMessage` send a separately templated copy to the configured accountant. The response includes `accountantSent` and an optional `accountantError`; client delivery remains successful if only the accountant copy fails.
+- `POST /api/invoices/:id/send` - Send via email. Optional `customSubject`/`customMessage` fields override the client email for one delivery. `sendToAccountant`, `accountantSubject`, and `accountantMessage` control the separately templated accountant copy. The response includes `accountantSent` and an optional `accountantError`; client delivery remains successful if only the accountant copy fails.
 - `POST /api/invoices/:id/mark-sent` - Mark as sent manually (without sending email)
 - `POST /api/invoices/:id/mark-paid` - Mark as paid
 - `POST /api/invoices/:id/cancel` - Cancel invoice
-- `GET /api/invoices/:id/preview` - Preview the client and accountant email content before sending. The `accountant` object includes the configured email, rendered subject/body, default checkbox state, and previous delivery details.
+- `GET /api/invoices/:id/preview` - Preview the client and accountant email content before sending. The `accountant` object includes the configured email, rendered subject/body, default checkbox state, and previous delivery details. Subjects are rendered from their configurable templates.
 
 EUR invoices include `exchangeRate` (CNB rate at issue date) and `totalCzk` (converted CZK equivalent) in responses. These are auto-fetched from the Czech National Bank when the invoice is created or updated. Dashboard totals and paušální daň tracking use the CZK equivalent for EUR invoices.
 
@@ -67,10 +69,13 @@ Both endpoints accept JSON in the form `{ "csv": "..." }`. Imports are limited t
 - `GET /api/expenses` - List expenses (filters: status, clientId, from, to)
 - `GET /api/expenses/:id` - Get expense details
 - `GET /api/expenses/:id/file` - Download attached file
-- `POST /api/expenses` - Create a paid expense by default, with optional file upload
+- `POST /api/expenses` - Create an expense with optional file upload. `paid` defaults to `true`; `amount`, `vatRate`, `vatAmount`, and `total` support exact net/gross VAT amounts.
 - `POST /api/expenses/import/preview` - Parse one Alza PDF and return expense fields without saving (`multipart/form-data`, field `file`)
 - `POST /api/expenses/import` - Parse and create up to 10 paid Alza expenses independently (`multipart/form-data`, repeated field `files`). Creates an Alza supplier contact by IČO when missing and assigns it to every imported expense. Uses Alza's printed final total including its rounding line.
-- `PUT /api/expenses/:id` - Update expense
+- `POST /api/expenses/import/universal` - Create up to 10 expenses from structured invoice text (`multipart/form-data`, field `data`) and repeated PDF/JPEG/PNG `files`. Each `FILE` value must exactly match one uploaded filename. All blocks, totals, and file pairings are validated before writes; individual duplicate/database failures are returned in `failed`. See [Universal Invoice Import](universal-invoice-import.md).
+- `PUT /api/expenses/:id` - Update a paid or unpaid expense. Supplying `total` preserves that gross value and derives VAT when `vatAmount` is omitted.
+- `PATCH /api/expenses/batch` - Set `status` to `paid` or `unpaid` on up to 100 selected expenses. Body: `{ ids: UUID[], status: "paid" | "unpaid" }`
+- `POST /api/expenses/batch-download` - Return attached source documents for up to 50 selected expenses as one ZIP archive. Expenses without attachments are omitted; returns 404 if none have attachments. Body: `{ ids: UUID[] }`
 - `DELETE /api/expenses/:id` - Delete expense
 - `POST /api/expenses/:id/mark-paid` - Mark as paid
 - `POST /api/expenses/:id/cancel` - Cancel expense
@@ -99,7 +104,7 @@ Both endpoints accept JSON in the form `{ "csv": "..." }`. Imports are limited t
 ## Settings
 
 - `GET /api/settings` - Get user settings
-- `PUT /api/settings` - Update settings, including `accountantEmail`, `accountantEmailTemplate`, and `accountantSendDefault`
+- `PUT /api/settings` - Update settings, including `emailSubjectTemplate`, `emailTemplate`, `accountantEmail`, `accountantEmailSubjectTemplate`, `accountantEmailTemplate`, and `accountantSendDefault`
 - `POST /api/settings/test-smtp` - Test SMTP connection
 - `POST /api/settings/test-imap` - Test IMAP connection
 
@@ -110,6 +115,7 @@ Invoice settings include:
 - `invoiceNumberStartingSequence` - starting value used only when the user has no invoices yet
 - `invoiceNumberResetPeriod` - `monthly` or `yearly`; controls sequence reset independently of the tokens displayed in the number
 - `invoicePdfTemplate` - `classic` or `minimalistic`; classic remains the default
+- `defaultExpensePaid` - whether the **Already paid** option is selected for new expenses; defaults to `true`
 
 ## AI (Perplexity)
 

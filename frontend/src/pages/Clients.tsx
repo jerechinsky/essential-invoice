@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useDialogKeyboard } from '../hooks/useDialogKeyboard';
 import { toast } from 'sonner';
 import { api } from '../utils/api';
 import { formatCurrency } from '../utils/format';
@@ -29,6 +30,7 @@ export default function Clients() {
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [aresLoading, setAresLoading] = useState(false);
+  useDialogKeyboard(showModal, () => setShowModal(false));
 
   const [formData, setFormData] = useState({
     companyName: '',

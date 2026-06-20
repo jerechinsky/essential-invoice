@@ -136,17 +136,15 @@ export default function ExpenseDetail() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          <Link to={`/expenses/${id}/edit`} className="btn btn-secondary flex items-center space-x-2">
+            <Edit className="h-4 w-4" />
+            <span>{t('detail.actions.edit')}</span>
+          </Link>
           {expense.status === 'unpaid' && (
-            <>
-              <Link to={`/expenses/${id}/edit`} className="btn btn-secondary flex items-center space-x-2">
-                <Edit className="h-4 w-4" />
-                <span>{t('detail.actions.edit')}</span>
-              </Link>
               <button onClick={handleMarkPaid} className="btn btn-success flex items-center space-x-2">
                 <CheckCircle className="h-4 w-4" />
                 <span>{t('detail.actions.markPaid')}</span>
               </button>
-            </>
           )}
           {expense.status === 'paid' && (
             <button onClick={handleMarkUnpaid} className="btn btn-secondary flex items-center space-x-2">

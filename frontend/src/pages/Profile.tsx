@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDialogKeyboard } from '../hooks/useDialogKeyboard';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
@@ -16,6 +17,12 @@ export default function Profile() {
   const [deletePassword, setDeletePassword] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [logoKey, setLogoKey] = useState(() => Date.now());
+  useDialogKeyboard(showDeleteModal, () => {
+    if (!deletingAccount) {
+      setShowDeleteModal(false);
+      setDeletePassword('');
+    }
+  });
 
   const logoUrl = useMemo(() => {
     if (!token) return '';

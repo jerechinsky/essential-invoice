@@ -26,9 +26,12 @@ interface Settings {
   invoicePdfTemplate: 'classic' | 'minimalistic';
   defaultVatRate: number;
   defaultPaymentTerms: number;
+  defaultExpensePaid: boolean;
   emailTemplate: string | null;
+  emailSubjectTemplate: string | null;
   accountantEmail: string | null;
   accountantEmailTemplate: string | null;
+  accountantEmailSubjectTemplate: string | null;
   accountantSendDefault: boolean;
   calculatorEnabled: boolean;
   aiEnabled: boolean;
@@ -57,9 +60,12 @@ type SettingsFormData = {
   invoicePdfTemplate: 'classic' | 'minimalistic';
   defaultVatRate: number;
   defaultPaymentTerms: number;
+  defaultExpensePaid: boolean;
   emailTemplate: string;
+  emailSubjectTemplate: string;
   accountantEmail: string;
   accountantEmailTemplate: string;
+  accountantEmailSubjectTemplate: string;
   accountantSendDefault: boolean;
   calculatorEnabled: boolean;
   aiEnabled: boolean;
@@ -96,9 +102,12 @@ export default function Settings() {
     invoicePdfTemplate: 'classic',
     defaultVatRate: 21,
     defaultPaymentTerms: 14,
+    defaultExpensePaid: true,
     emailTemplate: '',
+    emailSubjectTemplate: '',
     accountantEmail: '',
     accountantEmailTemplate: '',
+    accountantEmailSubjectTemplate: '',
     accountantSendDefault: false,
     calculatorEnabled: false,
     aiEnabled: true,
@@ -135,9 +144,12 @@ export default function Settings() {
         invoicePdfTemplate: result.invoicePdfTemplate === 'minimalistic' ? 'minimalistic' : 'classic',
         defaultVatRate: result.defaultVatRate ?? 21,
         defaultPaymentTerms: result.defaultPaymentTerms ?? 14,
+        defaultExpensePaid: result.defaultExpensePaid ?? true,
         emailTemplate: result.emailTemplate || '',
+        emailSubjectTemplate: result.emailSubjectTemplate || '',
         accountantEmail: result.accountantEmail || '',
         accountantEmailTemplate: result.accountantEmailTemplate || '',
+        accountantEmailSubjectTemplate: result.accountantEmailSubjectTemplate || '',
         accountantSendDefault: result.accountantSendDefault ?? false,
         calculatorEnabled: result.calculatorEnabled ?? false,
         aiEnabled: result.aiEnabled ?? true,
@@ -501,6 +513,21 @@ export default function Settings() {
                 min={1}
               />
             </div>
+            <div className="md:col-span-2">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  name="defaultExpensePaid"
+                  checked={formData.defaultExpensePaid}
+                  onChange={handleChange}
+                  className="rounded border-gray-300 text-indigo-600"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">{t('invoiceDefaults.expensePaid')}</span>
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
+                {t('invoiceDefaults.expensePaidHelp')}
+              </p>
+            </div>
             <div>
               <label className="label">{t('invoiceDefaults.invoiceNumberPrefix')}</label>
               <input
@@ -598,6 +625,18 @@ export default function Settings() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             {t('emailTemplate.variablesHelp')}
           </p>
+          <div className="mb-4">
+            <label className="label">{t('emailTemplate.subject')}</label>
+            <input
+              type="text"
+              name="emailSubjectTemplate"
+              value={formData.emailSubjectTemplate}
+              onChange={handleChange}
+              className="input"
+              placeholder={t('emailTemplate.subjectPlaceholder')}
+            />
+          </div>
+          <label className="label">{t('emailTemplate.message')}</label>
           <textarea
             name="emailTemplate"
             value={formData.emailTemplate}
@@ -641,6 +680,17 @@ export default function Settings() {
               />
               <span className="text-sm text-gray-600 dark:text-gray-400">{t('accountant.sendDefault')}</span>
             </label>
+            <div>
+              <label className="label">{t('accountant.subject')}</label>
+              <input
+                type="text"
+                name="accountantEmailSubjectTemplate"
+                value={formData.accountantEmailSubjectTemplate}
+                onChange={handleChange}
+                className="input"
+                placeholder={t('accountant.subjectPlaceholder')}
+              />
+            </div>
             <div>
               <label className="label">{t('accountant.template')}</label>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
