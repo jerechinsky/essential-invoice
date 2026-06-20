@@ -1,4 +1,4 @@
-FROM dhi.io/bun:1-debian13-dev AS builder
+FROM oven/bun:1-debian AS builder
 
 WORKDIR /app
 
@@ -11,15 +11,15 @@ COPY . .
 RUN bun run build
 
 # Production
-FROM dhi.io/nginx:1.31
+FROM nginx:alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ["-t"]
+    CMD ["nginx", "-t"]
 
 EXPOSE 80
 
-CMD ["-g", "daemon off;"]
+CMD ["nginx", "-g", "daemon off;"]

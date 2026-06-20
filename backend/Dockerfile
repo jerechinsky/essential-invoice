@@ -1,5 +1,5 @@
 # Install dependencies
-FROM dhi.io/bun:1-debian13-dev AS deps
+FROM oven/bun:1-debian AS deps
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ RUN bun install --frozen-lockfile --production
 
 
 # Production
-FROM dhi.io/bun:1
+FROM oven/bun:1-debian
 
 WORKDIR /app
 

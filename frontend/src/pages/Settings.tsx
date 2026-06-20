@@ -58,6 +58,9 @@ type SettingsFormData = {
   defaultVatRate: number;
   defaultPaymentTerms: number;
   emailTemplate: string;
+  accountantEmail: string;
+  accountantEmailTemplate: string;
+  accountantSendDefault: boolean;
   calculatorEnabled: boolean;
   aiEnabled: boolean;
   perplexityApiKey: string;
