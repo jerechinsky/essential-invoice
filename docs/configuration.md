@@ -29,6 +29,14 @@ Copy `.env.example` to `.env` in the project root and configure:
 | `GLOBAL_SMTP_FROM_EMAIL` | - | Sender email for system emails |
 | `GLOBAL_SMTP_FROM_NAME` | `essentialInvoice` | Sender name for system emails |
 
+## Request limits and proxies
+
+The API currently allows **1,000 requests per IP per 15 minutes**, increased from 100 as an interim measure for small installations. The global limiter runs before authentication; `/api/health` is excluded. Login also has a 10-request limit and forgot-password a 5-request limit, each per IP per 15 minutes. Successful login requests count toward the login limit too. HTTP 429 is temporary throttling, not a permanent ban. Counters are in memory per backend process, so restarts reset them and replicas have separate counters.
+
+Express currently uses a fixed `trust proxy` value of `1`. There is no supported `TRUST_PROXY` environment variable or Helm setting. Users whose requests resolve to the same IP share the allowance; increasing it does not fix client-IP detection. The bundled Helm ingress routes `/api` directly to the backend, but Cloudflare, additional proxies, and ingress header handling can change which address Express sees.
+
+Proxy-aware limits, separate account quotas, and session recovery after temporary failures are **planned**, not implemented. See [the implementation plan](planned-rate-limiting.md) for the proposed design and verification criteria.
+
 ## Language / Localization
 
 The application supports Czech (`cs`, default) and English (`en`). Each user's language preference is stored in the `users.language` column and can be changed on the Profile page.

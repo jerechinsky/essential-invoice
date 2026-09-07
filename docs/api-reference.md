@@ -2,6 +2,8 @@
 
 All endpoints require JWT authentication unless noted otherwise. Include the token in the `Authorization: Bearer <token>` header.
 
+Requests share a limit of **1,000 requests per IP per 15 minutes**, except `/api/health`. Login additionally permits 10 requests per IP per 15 minutes, and forgot-password permits 5. Exceeding a limit returns HTTP 429 with `Retry-After`; allowances reset automatically. See [request limits and proxies](configuration.md#request-limits-and-proxies).
+
 ## Authentication
 
 - `POST /api/auth/register` - Register new user (sends welcome email if global SMTP configured)

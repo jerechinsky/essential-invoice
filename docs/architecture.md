@@ -87,7 +87,7 @@ Essential Invoice is a self-hosted invoicing application for Czech freelancers w
 
 - All API endpoints (except auth) require JWT authentication
 - Passwords are hashed with bcrypt (12 rounds)
-- Rate limiting on API endpoints (100 requests/15 min)
+- Rate limiting on API endpoints (1,000 requests per IP per 15 minutes; health probes excluded). See the [planned rate-limiting improvements](planned-rate-limiting.md).
 - HTTPS recommended for production (configure via reverse proxy)
 - Environment-based configuration (no hardcoded secrets)
 - Input validation on all endpoints

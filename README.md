@@ -88,6 +88,7 @@ See [docs/development.md](docs/development.md) for full setup, testing, and proj
 | [Deployment](docs/deployment.md) | Docker, Helm/Kubernetes, backup & restore |
 | [Development](docs/development.md) | Local setup, testing, project structure, contributing |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and debugging |
+| [Planned rate limiting](docs/planned-rate-limiting.md) | Deferred account quotas, proxy support, and session recovery |
 
 ## License
 
