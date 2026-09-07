@@ -131,5 +131,9 @@
     "light": "Světlý",
     "dark": "Tmavý",
     "system": "Systémový"
+  },
+  "exports": {
+    "heading": "Exporty",
+    "description": "Podklady pro účetní za vybrané období."
   }
 }

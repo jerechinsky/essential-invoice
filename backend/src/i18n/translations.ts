@@ -13,6 +13,11 @@ interface PdfTranslations {
   total: string;
   subtotal: string;
   vat: string;
+  exempt: string;
+  reverseCharge: string;
+  reverseChargeNotice: string;
+  taxBase: string;
+  taxPointDate: string;
   totalDue: string;
   paymentDetails: string;
   accountNumber: string;
@@ -58,6 +63,11 @@ const translations: Record<Locale, Translations> = {
       total: 'CELKEM',
       subtotal: 'Základ daně:',
       vat: 'DPH',
+      exempt: 'Osvobozeno od DPH',
+      reverseCharge: 'Přenesená DPH',
+      reverseChargeNotice: 'Daň odvede zákazník.',
+      taxBase: 'Základ daně',
+      taxPointDate: 'DATUM ZDANITELNÉHO PLNĚNÍ',
       totalDue: 'Celkem k úhradě:',
       paymentDetails: 'Platební údaje',
       accountNumber: 'Číslo účtu:',
@@ -130,6 +140,11 @@ S pozdravem,
       total: 'TOTAL',
       subtotal: 'Subtotal:',
       vat: 'VAT',
+      exempt: 'VAT exempt',
+      reverseCharge: 'Reverse charge',
+      reverseChargeNotice: 'Reverse charge - the customer accounts for VAT.',
+      taxBase: 'Tax base',
+      taxPointDate: 'TAX POINT DATE',
       totalDue: 'Total due:',
       paymentDetails: 'Payment details',
       accountNumber: 'Account number:',

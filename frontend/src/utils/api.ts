@@ -76,7 +76,8 @@ export const api = {
 
     if (!response.ok) {
       handleUnauthorized(response.status, endpoint);
-      throw new ApiError('Download failed', response.status);
+      const error = await response.json().catch(() => ({ error: 'Download failed' }));
+      throw new ApiError(error.error || 'Download failed', response.status);
     }
 
     const blob = await response.blob();

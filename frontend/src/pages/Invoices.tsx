@@ -228,6 +228,7 @@ export default function Invoices() {
         </div>
       </div>
 
+
       {activeTab === 'recurring' ? (
         <RecurringInvoices />
       ) : loading ? (

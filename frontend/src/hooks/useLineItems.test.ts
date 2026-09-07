@@ -68,3 +68,18 @@ describe('useLineItems', () => {
     expect(result.current.total).toBe(250);
   });
 });
+
+
+it('keeps explicit line rates when changing the default and rounds grouped VAT', () => {
+  const { result, rerender } = renderHook(({ rate }) => useLineItems(rate), { initialProps: { rate: 21 } });
+  act(() => result.current.setItems([
+    { description: 'Reduced', quantity: 1, unit: 'ks', unitPrice: 100, vatRate: 12 },
+    { description: 'Exempt', quantity: 1, unit: 'ks', unitPrice: 100, vatTreatment: 'exempt', vatReason: 'Law' },
+    { description: 'Reverse', quantity: 1, unit: 'ks', unitPrice: 100, vatTreatment: 'reverse_charge', vatRate: 21, vatCode: '4' },
+    { description: 'Default', quantity: 1, unit: 'ks', unitPrice: 100 },
+  ]));
+  expect(result.current.total).toBe(433);
+  rerender({ rate: 0 });
+  expect(result.current.total).toBe(412);
+  expect(result.current.breakdown).toHaveLength(4);
+});

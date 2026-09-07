@@ -9,6 +9,7 @@ import { paymentRouter } from './routes/payments';
 import { settingsRouter } from './routes/settings';
 import { aresRouter } from './routes/ares';
 import { aiRouter } from './routes/ai';
+import { exportRouter } from './routes/exports';
 import { expenseRouter } from './routes/expenses';
 import { recurringRouter } from './routes/recurring';
 import { authenticateToken } from './middleware/auth';
@@ -79,6 +80,7 @@ app.use('/api/payments', authenticateToken, paymentRouter);
 app.use('/api/settings', authenticateToken, settingsRouter);
 app.use('/api/ares', authenticateToken, aresRouter);
 app.use('/api/ai', authenticateToken, aiRouter);
+app.use('/api/exports', authenticateToken, exportRouter);
 app.use('/api/expenses', authenticateToken, expenseRouter);
 app.use('/api/recurring-invoices', authenticateToken, recurringRouter);
 

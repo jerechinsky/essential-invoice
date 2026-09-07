@@ -5,9 +5,13 @@ import { AuthRequest } from '../middleware/auth';
 import { generateInvoicePDF } from '../services/pdfGenerator';
 import { sendInvoiceEmail } from '../services/emailSender';
 import { generateSpayd } from '../utils/validation';
-import { calculateLineTotal, calculateInvoiceTotals } from '../utils/money';
+import { calculateLineTotal, calculateInvoiceTax } from '../utils/money';
 import { t, formatDateLocale, formatCurrencyLocale } from '../i18n/translations';
 import { convertEurToCzk } from '../services/cnbExchangeRate';
+
+import { generateISDOC } from '../services/isdocGenerator';
+import { ExportError, safeFilename } from '../services/invoiceDocument';
+import { vatValidation } from '../utils/vatValidation';
 
 export const invoiceRouter: ReturnType<typeof Router> = Router();
 
@@ -129,6 +133,20 @@ invoiceRouter.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+invoiceRouter.get('/:id/isdoc', async (req: AuthRequest, res: Response) => {
+  try {
+    const { xml, invoiceNumber } = await generateISDOC(String(req.params.id), req.userId!);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(invoiceNumber)}.isdoc"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(xml);
+  } catch (error) {
+    if (error instanceof ExportError) return res.status(error.status).json({ error: error.message });
+    console.error('ISDOC export error:', error);
+    res.status(500).json({ error: 'Failed to generate ISDOC' });
+  }
+});
+
 // Get single invoice with items
 invoiceRouter.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -190,7 +208,12 @@ invoiceRouter.get('/:id', async (req: AuthRequest, res: Response) => {
         quantity: parseFloat(item.quantity),
         unit: item.unit,
         unitPrice: parseFloat(item.unit_price),
-        total: parseFloat(item.total)
+        total: parseFloat(item.total),
+        vatRate: Number(item.vat_rate ?? row.vat_rate),
+        vatTreatment: item.vat_treatment ?? 'standard',
+        vatCode: item.vat_code ?? '',
+        vatReason: item.vat_reason ?? '',
+        vatAmount: item.vat_amount == null ? undefined : Number(item.vat_amount)
       }))
     };
 
@@ -206,11 +229,12 @@ invoiceRouter.post('/',
   body('clientId').isUUID(),
   body('issueDate').isISO8601(),
   body('dueDate').isISO8601(),
+  body('deliveryDate').optional().isISO8601(),
   body('items').isArray({ min: 1 }),
   body('items.*.description').isLength({ max: 150 }).withMessage('Item description must not exceed 150 characters'),
   body('items.*.quantity').isFloat({ gt: 0 }).withMessage('Item quantity must be a positive number'),
   body('items.*.unitPrice').isFloat({ min: 0 }).withMessage('Item unit price must be a non-negative number'),
-  body('vatRate').optional().isFloat({ min: 0, max: 100 }).withMessage('VAT rate must be between 0 and 100'),
+  ...vatValidation(),
   body('currency').optional().isIn(['CZK', 'EUR']).withMessage('Currency must be CZK or EUR'),
   body('notes').optional().isLength({ max: 300 }).withMessage('Notes must not exceed 300 characters'),
   async (req: AuthRequest, res: Response) => {
@@ -233,7 +257,7 @@ invoiceRouter.post('/',
       }
 
       // Calculate totals (rounded to 2 decimals at every step)
-      const { subtotal, vatAmount, total } = calculateInvoiceTotals(items, vatRate);
+      const { subtotal, vatAmount, total, lines } = calculateInvoiceTax(items, vatRate);
 
       // Get user's bank details for QR code
       const userResult = await query(
@@ -289,11 +313,11 @@ invoiceRouter.post('/',
           invoice = invoiceResult.rows[0];
 
           for (let i = 0; i < items.length; i++) {
-            const item = items[i];
+            const item = { ...items[i], ...lines[i] };
             await client.query(
-              `INSERT INTO invoice_items (invoice_id, description, quantity, unit, unit_price, total, sort_order)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-              [invoice.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, calculateLineTotal(item), i]
+              `INSERT INTO invoice_items (invoice_id, description, quantity, unit, unit_price, total, sort_order, vat_rate, vat_treatment, vat_reason, vat_amount, vat_code)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+              [invoice.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, calculateLineTotal(item), i, item.vatRate, item.vatTreatment, item.vatReason, item.vatAmount, item.vatCode || '']
             );
           }
 
@@ -328,11 +352,15 @@ invoiceRouter.post('/',
 
 // Update invoice
 invoiceRouter.put('/:id',
+  body('clientId').optional().isUUID(),
+  body('issueDate').optional().isISO8601(),
+  body('dueDate').optional().isISO8601(),
+  body('deliveryDate').optional().isISO8601(),
   body('items').optional().isArray({ min: 1 }),
   body('items.*.description').optional().isLength({ max: 150 }).withMessage('Item description must not exceed 150 characters'),
-  body('items.*.quantity').optional().isFloat({ gt: 0 }).withMessage('Item quantity must be a positive number'),
-  body('items.*.unitPrice').optional().isFloat({ min: 0 }).withMessage('Item unit price must be a non-negative number'),
-  body('vatRate').optional().isFloat({ min: 0, max: 100 }).withMessage('VAT rate must be between 0 and 100'),
+  body('items.*.quantity').isFloat({ gt: 0 }).withMessage('Item quantity must be a positive number'),
+  body('items.*.unitPrice').isFloat({ min: 0 }).withMessage('Item unit price must be a non-negative number'),
+  ...vatValidation(),
   body('currency').optional().isIn(['CZK', 'EUR']).withMessage('Currency must be CZK or EUR'),
   body('status').optional().isIn(['draft', 'sent', 'overdue', 'paid', 'cancelled']).withMessage('Invalid status'),
   body('notes').optional().isLength({ max: 300 }).withMessage('Notes must not exceed 300 characters'),
@@ -347,7 +375,7 @@ invoiceRouter.put('/:id',
     try {
       // Check invoice exists and is draft (can only edit drafts)
       const invoiceCheck = await query(
-        'SELECT status, issue_date, currency, invoice_number, variable_symbol, total FROM invoices WHERE id = $1 AND user_id = $2',
+        'SELECT status, issue_date, currency, invoice_number, variable_symbol, total, vat_rate FROM invoices WHERE id = $1 AND user_id = $2',
         [req.params.id, req.userId]
       );
 
@@ -383,14 +411,23 @@ invoiceRouter.put('/:id',
         return res.json({ message: 'Invoice status updated' });
       }
 
+      if (clientId) {
+        const owner = await query('SELECT id FROM clients WHERE id = $1 AND user_id = $2', [clientId, req.userId]);
+        if (!owner.rows.length) return res.status(400).json({ error: 'Invalid client' });
+      }
+      if (!items && (vatRate !== undefined || currency !== undefined || issueDate !== undefined)) {
+        return res.status(400).json({ error: 'Include items when changing VAT, currency, or issue date' });
+      }
+
       // Calculate totals if items provided (rounded to 2 decimals at every step)
       let subtotal = 0;
       let vatAmount = 0;
       let total = 0;
-      const actualVatRate = vatRate ?? 21;
+      const actualVatRate = vatRate ?? Number(invoiceCheck.rows[0].vat_rate ?? 21);
+      let lines: ReturnType<typeof calculateInvoiceTax>['lines'] = [];
 
       if (items) {
-        ({ subtotal, vatAmount, total } = calculateInvoiceTotals(items, actualVatRate));
+        ({ subtotal, vatAmount, total, lines } = calculateInvoiceTax(items, actualVatRate));
       }
 
       // Fetch exchange rate for EUR invoices when items are recalculated
@@ -445,11 +482,11 @@ invoiceRouter.put('/:id',
         if (items) {
           await client.query('DELETE FROM invoice_items WHERE invoice_id = $1', [req.params.id]);
           for (let i = 0; i < items.length; i++) {
-            const item = items[i];
+            const item = { ...items[i], ...lines[i] };
             await client.query(
-              `INSERT INTO invoice_items (invoice_id, description, quantity, unit, unit_price, total, sort_order)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-              [req.params.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, calculateLineTotal(item), i]
+              `INSERT INTO invoice_items (invoice_id, description, quantity, unit, unit_price, total, sort_order, vat_rate, vat_treatment, vat_reason, vat_amount, vat_code)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+              [req.params.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, calculateLineTotal(item), i, item.vatRate, item.vatTreatment, item.vatReason, item.vatAmount, item.vatCode || '']
             );
           }
         }
@@ -467,8 +504,8 @@ invoiceRouter.put('/:id',
             total = COALESCE($9, total),
             notes = $10,
             status = COALESCE($11, status),
-            exchange_rate = COALESCE($14, exchange_rate),
-            total_czk = COALESCE($15, total_czk),
+            exchange_rate = CASE WHEN $18::boolean THEN $14 ELSE exchange_rate END,
+            total_czk = CASE WHEN $18::boolean THEN $15 ELSE total_czk END,
             qr_payment_data = CASE WHEN $16::boolean THEN $17 ELSE qr_payment_data END,
             updated_at = CURRENT_TIMESTAMP
            WHERE id = $12 AND user_id = $13
@@ -476,7 +513,7 @@ invoiceRouter.put('/:id',
           [clientId, issueDate, dueDate, deliveryDate, currency, actualVatRate,
            items ? subtotal : null, items ? vatAmount : null, items ? total : null,
            notes, status, req.params.id, req.userId, exchangeRate, totalCzk,
-           qrPaymentData !== undefined, qrPaymentData ?? null]
+           qrPaymentData !== undefined, qrPaymentData ?? null, !!items]
         );
 
         await client.query('COMMIT');

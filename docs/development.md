@@ -4,6 +4,7 @@
 
 - [Bun](https://bun.sh/) runtime
 - Docker and Docker Compose (for PostgreSQL)
+- `xmllint` for ISDOC schema tests (included on macOS; `sudo apt-get install libxml2-utils` on Debian/Ubuntu)
 
 ## Local Development Setup
 
@@ -68,6 +69,8 @@ Before submitting code changes, run both suites. For frontend changes, also run 
 - Bank parser factory (bank detection, payment parsing)
 - Validation utilities (IČO checksum, email, currency formatting, SPAYD)
 - API routes (authentication, authorization, validation)
+- Mixed-rate VAT rounding, tax treatment validation, and export access controls
+- ISDOC CZK/EUR fixtures validated against the bundled official XSD; ZIP contents and CSV escaping
 - Frontend utilities (date/currency formatting, status labels)
 
 ### Pull request CI

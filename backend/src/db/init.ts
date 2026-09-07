@@ -262,6 +262,38 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_recurring_invoice_items_recurring_id ON recurring_invoice_items(recurring_invoice_id);
       CREATE INDEX IF NOT EXISTS idx_invoices_recurring_invoice_id ON invoices(recurring_invoice_id);
 
+      -- Per-line VAT. Backfill once without changing historical invoice totals.
+      ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS vat_rate DECIMAL(5, 2);
+      ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(20) NOT NULL DEFAULT 'standard'
+        CHECK (vat_treatment IN ('standard', 'exempt', 'reverse_charge'));
+      ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS vat_reason VARCHAR(300) NOT NULL DEFAULT '';
+      ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS vat_code VARCHAR(20) NOT NULL DEFAULT '';
+      ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(12, 2);
+      WITH allocation AS (
+        SELECT ii.id, i.vat_rate,
+          CASE WHEN SUM(ii.total) OVER (PARTITION BY ii.invoice_id) = 0 THEN 0 ELSE
+            ROUND(i.vat_amount * SUM(ii.total) OVER (
+              PARTITION BY ii.invoice_id ORDER BY ii.sort_order, ii.id
+              ROWS UNBOUNDED PRECEDING) / SUM(ii.total) OVER (PARTITION BY ii.invoice_id), 2)
+          END AS cumulative_tax
+        FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+        WHERE ii.vat_rate IS NULL
+      ), taxes AS (
+        SELECT a.id, a.vat_rate, a.cumulative_tax - COALESCE(LAG(a.cumulative_tax) OVER (
+          PARTITION BY ii.invoice_id ORDER BY ii.sort_order, ii.id), 0) AS tax
+        FROM allocation a JOIN invoice_items ii ON ii.id = a.id
+      )
+      UPDATE invoice_items ii SET vat_rate = taxes.vat_rate, vat_amount = taxes.tax
+        FROM taxes WHERE taxes.id = ii.id;
+
+      ALTER TABLE recurring_invoice_items ADD COLUMN IF NOT EXISTS vat_rate DECIMAL(5, 2);
+      ALTER TABLE recurring_invoice_items ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(20) NOT NULL DEFAULT 'standard'
+        CHECK (vat_treatment IN ('standard', 'exempt', 'reverse_charge'));
+      ALTER TABLE recurring_invoice_items ADD COLUMN IF NOT EXISTS vat_reason VARCHAR(300) NOT NULL DEFAULT '';
+      ALTER TABLE recurring_invoice_items ADD COLUMN IF NOT EXISTS vat_code VARCHAR(20) NOT NULL DEFAULT '';
+      UPDATE recurring_invoice_items ii SET vat_rate = ri.vat_rate
+        FROM recurring_invoices ri WHERE ri.id = ii.recurring_invoice_id AND ii.vat_rate IS NULL;
+
       -- Add language column to users table
       DO $$
       BEGIN

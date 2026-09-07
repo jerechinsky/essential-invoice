@@ -1,3 +1,4 @@
+import { summarizeStoredTax, LineItem } from '../utils/money';
 import QRCode from 'qrcode';
 import { query } from '../db/init';
 import { t, formatDateLocale, formatCurrencyLocale } from '../i18n/translations';
@@ -45,12 +46,13 @@ interface InvoiceData {
   // Language
   language: string;
   // Items
-  items: Array<{
+  items: Array<LineItem & {
     description: string;
     quantity: number;
     unit: string;
     unitPrice: number;
     total: number;
+    vatAmount?: number;
   }>;
 }
 
@@ -116,7 +118,7 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
 
   const headerLine: Content = {
     canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: BLUE }],
-    margin: [0, 0, 0, 20],
+    margin: [0, 0, 0, 14],
   };
 
   // --- Parties section ---
@@ -144,20 +146,22 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
       buildPartyStack(tr.supplier, invoice.userCompanyName || invoice.userName, invoice.userAddress, invoice.userIco, invoice.userDic, !invoice.userVatPayer),
       buildPartyStack(tr.customer, invoice.clientName, invoice.clientAddress, invoice.clientIco, invoice.clientDic),
     ],
-    margin: [0, 0, 0, 18],
+    margin: [0, 0, 0, 12],
   };
 
   // --- Dates section ---
   const datesSection: Content = {
     table: {
-      widths: ['*', '*'],
+      widths: ['*', '*', '*'],
       body: [
         [
           { text: tr.issueDate, fontSize: 8, color: '#666', alignment: 'center' as const },
+          { text: tr.taxPointDate, fontSize: 8, color: '#666', alignment: 'center' as const },
           { text: tr.dueDate, fontSize: 8, color: '#666', alignment: 'center' as const },
         ],
         [
           { text: formatDate(invoice.issueDate, lang), fontSize: 11, bold: true, alignment: 'center' as const },
+          { text: formatDate(invoice.deliveryDate || invoice.issueDate, lang), fontSize: 11, bold: true, alignment: 'center' as const },
           { text: formatDate(invoice.dueDate, lang), fontSize: 11, bold: true, alignment: 'center' as const },
         ],
       ],
@@ -171,7 +175,7 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
       paddingLeft: () => 8,
       paddingRight: () => 8,
     },
-    margin: [0, 0, 0, 18],
+    margin: [0, 0, 0, 12],
   };
 
   // --- Items table ---
@@ -179,20 +183,24 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
     { text: tr.description, style: 'tableHeader' },
     { text: tr.quantity, style: 'tableHeader', alignment: 'right' },
     { text: tr.unitPrice, style: 'tableHeader', alignment: 'right' },
+    ...(invoice.userVatPayer ? [{ text: tr.vat, style: 'tableHeader', alignment: 'right' as const }] : []),
     { text: tr.total, style: 'tableHeader', alignment: 'right' },
   ];
 
   const itemRows: TableCell[][] = invoice.items.map(item => [
-    { text: item.description },
+    { text: [item.description,
+      ...(item.vatTreatment === 'exempt' ? [`\n${tr.exempt}: ${item.vatReason}`] : []),
+      ...(item.vatTreatment === 'reverse_charge' ? [`\n${tr.reverseChargeNotice}${item.vatReason ? ` ${item.vatReason}` : ''}`] : [])].join('') },
     { text: `${item.quantity} ${item.unit}`, alignment: 'right' as const },
     { text: formatCurrency(item.unitPrice, invoice.currency, lang), alignment: 'right' as const },
+    ...(invoice.userVatPayer ? [{ text: item.vatTreatment === 'exempt' ? tr.exempt : item.vatTreatment === 'reverse_charge' ? tr.reverseCharge : `${item.vatRate ?? invoice.vatRate}%`, alignment: 'right' as const, fontSize: 8 }] : []),
     { text: formatCurrency(item.total, invoice.currency, lang), alignment: 'right' as const },
   ]);
 
   const itemsSection: Content = {
     table: {
       headerRows: 1,
-      widths: ['*', 'auto', 'auto', 'auto'],
+      widths: invoice.userVatPayer ? ['*', 'auto', 'auto', 'auto', 'auto'] : ['*', 'auto', 'auto', 'auto'],
       body: [itemsHeaderRow, ...itemRows],
     },
     layout: {
@@ -200,12 +208,12 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
       hLineWidth: (i: number, node: any) => (i === 0 || i === 1 ? 0 : 1),
       vLineWidth: () => 0,
       hLineColor: () => GRAY_BORDER,
-      paddingTop: () => 8,
-      paddingBottom: () => 8,
+      paddingTop: () => 5,
+      paddingBottom: () => 5,
       paddingLeft: () => 8,
       paddingRight: () => 8,
     },
-    margin: [0, 0, 0, 18],
+    margin: [0, 0, 0, 12],
   };
 
   // --- Totals section ---
@@ -216,12 +224,14 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
     ],
   ];
 
-  // Only show VAT line if VAT rate is greater than 0
-  if (invoice.vatRate > 0) {
-    totalsRows.push([
-      { text: `${tr.vat} (${invoice.vatRate}%):` },
-      { text: formatCurrency(invoice.vatAmount, invoice.currency, lang), alignment: 'right' as const },
-    ]);
+  if (invoice.userVatPayer) {
+    for (const group of summarizeStoredTax(invoice.items, invoice.vatRate)) {
+      const label = group.vatTreatment === 'standard' ? `${tr.vat} (${group.vatRate}%)` : group.vatTreatment === 'exempt' ? tr.exempt : tr.reverseCharge;
+      totalsRows.push([
+        { text: `${label} · ${tr.taxBase}: ${formatCurrency(group.base, invoice.currency, lang)}`, fontSize: 9 },
+        { text: formatCurrency(group.vatAmount, invoice.currency, lang), alignment: 'right' as const },
+      ]);
+    }
   }
 
   totalsRows.push([
@@ -242,7 +252,7 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
   }
 
   const totalsTable: Column = {
-    width: 250,
+    width: 340,
     table: {
       widths: ['*', 'auto'],
       body: totalsRows,
@@ -313,6 +323,7 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
   const paymentSection: Content = {
     table: {
       widths: ['*'],
+      dontBreakRows: true,
       body: [
         [
           {
@@ -328,8 +339,8 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
       vLineWidth: () => 1,
       hLineColor: () => '#bae6fd',
       vLineColor: () => '#bae6fd',
-      paddingTop: () => 12,
-      paddingBottom: () => 12,
+      paddingTop: () => 8,
+      paddingBottom: () => 8,
       paddingLeft: () => 14,
       paddingRight: () => 14,
     },
@@ -370,7 +381,7 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
   // --- Footer ---
   const footerLine: Content = {
     canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: GRAY_BORDER }],
-    margin: [0, 20, 0, 10],
+    margin: [0, 10, 0, 6],
   };
 
   const footerText: Content = {
@@ -412,7 +423,7 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
     defaultStyle: {
       font: 'Roboto',
       fontSize: 10,
-      lineHeight: 1.3,
+      lineHeight: 1.1,
     },
   };
 }
@@ -486,7 +497,11 @@ export async function generateInvoicePDF(invoiceId: string, userId: string): Pro
       quantity: parseFloat(item.quantity),
       unit: item.unit,
       unitPrice: parseFloat(item.unit_price),
-      total: parseFloat(item.total)
+      total: parseFloat(item.total),
+      vatRate: Number(item.vat_rate ?? row.vat_rate),
+      vatTreatment: item.vat_treatment ?? 'standard',
+      vatReason: item.vat_reason ?? '',
+      vatAmount: item.vat_amount == null ? undefined : Number(item.vat_amount)
     }))
   };
 

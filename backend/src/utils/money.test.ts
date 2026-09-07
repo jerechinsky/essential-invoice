@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { roundMoney, calculateLineTotal, calculateInvoiceTotals } from './money';
+import { roundMoney, calculateLineTotal, calculateInvoiceTotals, calculateInvoiceTax } from './money';
 
 describe('roundMoney', () => {
   it('rounds to 2 decimal places', () => {
@@ -59,5 +59,31 @@ describe('calculateInvoiceTotals', () => {
     const totals = calculateInvoiceTotals(items, 0);
     const summedLines = items.reduce((sum, item) => sum + calculateLineTotal(item), 0);
     expect(totals.subtotal).toBe(roundMoney(summedLines));
+  });
+});
+
+
+describe('per-line VAT', () => {
+  it('separates standard zero, exempt, and reverse-charge groups', () => {
+    const result = calculateInvoiceTax([
+      { quantity: 1, unitPrice: 100, vatRate: 21 },
+      { quantity: 1, unitPrice: 100, vatRate: 12 },
+      { quantity: 1, unitPrice: 100, vatRate: 0 },
+      { quantity: 1, unitPrice: 100, vatTreatment: 'exempt', vatReason: 'Law' },
+      { quantity: 1, unitPrice: 100, vatTreatment: 'reverse_charge', vatRate: 21 },
+    ], 21);
+    expect(result).toMatchObject({ subtotal: 500, vatAmount: 33, total: 533 });
+    expect(result.breakdown).toHaveLength(5);
+    expect(result.lines.map(line => line.vatAmount)).toEqual([21, 12, 0, 0, 0]);
+  });
+  it('allocates sub-cent tax so lines reconcile with the rate total', () => {
+    const result = calculateInvoiceTax(Array.from({ length: 100 }, () => ({ quantity: 1, unitPrice: 0.03, vatRate: 21 })), 0);
+    expect(result.vatAmount).toBe(0.63);
+    expect(roundMoney(result.lines.reduce((sum, item) => sum + item.vatAmount, 0))).toBe(0.63);
+    expect(result.total).toBe(3.63);
+  });
+  it('retains legacy invoice-level rounding for omitted per-line rates', () => {
+    const items = [{ quantity: 1, unitPrice: 0.03 }, { quantity: 1, unitPrice: 0.03 }];
+    expect(calculateInvoiceTotals(items, 21)).toEqual({ subtotal: 0.06, vatAmount: 0.01, total: 0.07 });
   });
 });

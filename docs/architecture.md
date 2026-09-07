@@ -8,10 +8,13 @@ Essential Invoice is a self-hosted invoicing application for Czech freelancers w
 - **Entry point**: `index.ts` - Express app setup, middleware, route mounting
 - **Routes**: `routes/` - REST endpoints for auth (register, login, forgot-password, reset-password, delete account), clients, invoices, recurring invoices, expenses, payments, settings, ARES lookup, dashboard, AI
 - **Services**: `services/` - Business logic:
-  - `pdfGenerator.ts` - Invoice PDF generation using **pdfmake** library with Czech formatting, QR payment codes (SPAYD), and VAT/non-VAT payer support (hides DIČ and shows "Neplátce DPH" for non-VAT payers, hides DPH line when rate is 0%)
+  - `pdfGenerator.ts` - Invoice PDF generation using **pdfmake** library with Czech formatting, QR payment codes (SPAYD), and VAT/non-VAT payer support, per-line tax treatments, tax-point dates and grouped VAT breakdowns
   - `emailSender.ts` - Per-user SMTP email sending for invoice delivery
   - `globalEmailSender.ts` - Global SMTP email sending for system emails (welcome, password reset), configured via env vars
   - `emailPoller.ts` - IMAP polling for bank payment notifications
+  - `invoiceDocument.ts` - Owner-scoped export data loading and normalization of stored line taxes
+  - `isdocGenerator.ts` - ISDOC 6.0.2 serialization with tax groups, exemption/reverse-charge metadata and CZK/EUR amounts
+  - `accountantExport.ts` - Bounded period ZIP packages with CSV summaries, PDFs, ISDOC and expense attachments; exposed through `routes/exports.ts`
   - `recurringInvoiceGenerator.ts` - In-process scheduler (setInterval) that auto-generates invoices from recurring templates, with optional auto-send via SMTP
   - `aiProvider.ts` - AI features via OpenRouter (default: openai/gpt-5.6-luna) or any OpenAI-compatible API: personalized Czech tax advisor, expense extraction from documents, payment reminder drafting
   - `cnbExchangeRate.ts` - CNB (Czech National Bank) exchange rate fetching with DB caching and weekend/holiday fallback. Used to convert EUR invoices and expenses to CZK equivalents for dashboard totals and paušální daň tracking
@@ -99,3 +102,11 @@ The bank parsing system is designed to be extensible. To add support for another
 1. Create a new parser in `backend/src/services/bankParsers/`
 2. Implement the `ParsedPayment` interface
 3. Register the parser in `bankParsers/index.ts`
+
+## VAT data and exports
+
+`invoice_items` stores `vat_rate`, `vat_treatment`, `vat_reason`, `vat_code` and allocated `vat_amount`; recurring items store the same tax inputs without calculated VAT. `db/init.ts` backfills legacy invoice rates and allocates the existing recorded VAT without rewriting document totals. Migration is repeatable. The invoice/template header rate remains an API-compatible default.
+
+`utils/money.ts` rounds line bases, computes tax per rate/treatment group, and allocates it cumulatively to invoice lines. Frontend `utils/money.ts` mirrors that calculation for previews; the backend remains authoritative. `InvoiceItemsEditor`, `VatBreakdown`, and `useLineItems` share the editing/display behavior between invoices and recurring templates. `AccountantExport` supplies period/date-basis controls at `/settings/exports`, with its own download form. Invoice editors use a compact per-line VAT selector and reveal special-treatment fields as needed; tax breakdowns are collapsed while editing. Non-VAT payers start new documents at 0%, with controls available on demand; existing taxable lines remain visible.
+
+Exports use current supplier/client profiles and stored invoice amounts. They do not implement immutable party snapshots, filing XML, EU supply modes, ISDOC import, or credit/advance document types. Expenses retain their existing document-level VAT model.

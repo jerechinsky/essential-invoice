@@ -1,3 +1,6 @@
+import VatBreakdown, { LineVatLabel } from '../components/VatBreakdown';
+import type { LineItem } from '../hooks/useLineItems';
+import { calculateInvoiceTax } from '../utils/money';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -14,7 +17,7 @@ import {
   Zap,
 } from 'lucide-react';
 
-interface RecurringItem {
+interface RecurringItem extends LineItem {
   id: string;
   description: string;
   quantity: number;
@@ -121,9 +124,7 @@ export default function RecurringInvoiceDetail() {
 
   const columnHeader = 'text-[11px] uppercase font-semibold tracking-[.04em] text-text-faint';
 
-  const subtotal = template.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const vatAmount = subtotal * (template.vatRate / 100);
-  const total = subtotal + vatAmount;
+  const { subtotal, total } = calculateInvoiceTax(template.items, template.vatRate);
 
   return (
     <div>
@@ -203,7 +204,7 @@ export default function RecurringInvoiceDetail() {
                 key={item.id}
                 className="grid grid-cols-[2.6fr_0.9fr_1fr_1fr] gap-x-4 py-3 border-b border-hairline-soft last:border-b-0"
               >
-                <span className="text-sm text-text">{item.description}</span>
+                <span className="text-sm text-text">{item.description}<LineVatLabel item={item} defaultRate={template.vatRate} /></span>
                 <span className="text-sm text-text-secondary text-right tabular-nums">{item.quantity} {item.unit}</span>
                 <span className="text-sm text-text-secondary text-right tabular-nums">{formatCurrency(item.unitPrice, template.currency)}</span>
                 <span className="text-sm font-medium text-text text-right tabular-nums">{formatCurrency(item.quantity * item.unitPrice, template.currency)}</span>
@@ -215,10 +216,8 @@ export default function RecurringInvoiceDetail() {
                   <span className="text-[13px] text-text-muted">{t('recurring.detail.subtotal')}</span>
                   <span className="text-sm text-text tabular-nums">{formatCurrency(subtotal, template.currency)}</span>
                 </div>
-                <div className="flex justify-between items-baseline">
-                  <span className="text-[13px] text-text-muted">{t('recurring.detail.vatWithRate', { rate: template.vatRate })}</span>
-                  <span className="text-sm text-text tabular-nums">{formatCurrency(vatAmount, template.currency)}</span>
-                </div>
+                <VatBreakdown items={template.items} defaultRate={template.vatRate}
+                  formatCurrency={amount => formatCurrency(amount, template.currency)} />
                 <div className="flex justify-between items-baseline pt-2 border-t border-hairline">
                   <span className="text-sm font-semibold text-text">{t('recurring.detail.total')}</span>
                   <span className="text-[26px] leading-tight font-bold tracking-[-0.02em] text-accent tabular-nums">

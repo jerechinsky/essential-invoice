@@ -10,6 +10,8 @@ A lightweight, self-hosted invoicing web application designed for Czech freelanc
 
 - **AI Features**: Personalized Czech tax advisor with live web search, expense extraction from uploaded receipts/invoices, and AI-drafted payment reminders (via OpenRouter or any OpenAI-compatible API)
 - **Invoice Management**: Create, edit, duplicate, and send invoices with automatic numbering
+- **Per-line VAT**: Mixed VAT rates, exemption reasons and domestic reverse charge, with consistent totals in invoices, recurring templates and PDFs
+- **Accountant Exports**: Period ZIP packages with CSV summaries, invoice PDFs, expense attachments and ISDOC 6.0.2 files; individual ISDOC downloads
 - **Recurring Invoices**: Monthly recurring invoice templates with optional auto-send
 - **Expense Tracking**: Track business expenses with PDF attachments and automatic numbering
 - **Client Management**: Store and manage client contacts with ARES API integration for Czech companies
@@ -25,6 +27,14 @@ A lightweight, self-hosted invoicing web application designed for Czech freelanc
 - **Multi-currency**: Support for CZK and EUR
 - **Docker Ready**: Single command deployment with docker compose
 - **Helm Chart**: Kubernetes deployment with built-in PostgreSQL StatefulSet
+
+### VAT and accounting workflow
+
+Set the VAT rate and treatment on each invoice line. Exempt lines require a reason/legal reference; domestic reverse-charge lines require the supply code and show “Daň odvede zákazník” on Czech PDFs. The default rate applies to lines without their own rate. Tax-point dates can be set separately from issue dates.
+
+The item VAT selector inherits your saved default; exemption and reverse-charge fields appear only when selected. The tax breakdown can be expanded, and the tax-point date follows the issue date unless overridden. New invoices for non-VAT payers start at 0% with VAT controls hidden.
+
+Open **Settings → Exports** to select a period by issue or tax-point date and download the ZIP. It includes issued invoices (sent, overdue, paid) and expenses, with a limit of 500 documents / 100 MB. Use **Download ISDOC** on an invoice for an individual file. This release exports accounting records; it does not generate VAT return/control-statement XML or import ISDOC. See the [API reference](docs/api-reference.md#accountant-export) for package contents and format details.
 
 ## Quick Start
 

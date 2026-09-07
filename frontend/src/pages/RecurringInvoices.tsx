@@ -22,6 +22,7 @@ interface RecurringInvoice {
   autoSend: boolean;
   active: boolean;
   subtotal: number;
+  total: number;
   createdAt: string;
 }
 
@@ -97,7 +98,7 @@ export default function RecurringInvoices() {
     <div className="space-y-3">
       {templates.map((template) => {
         const days = daysUntil(template.nextGenerationDate);
-        const total = template.subtotal * (1 + template.vatRate / 100);
+        const total = template.total ?? template.subtotal * (1 + template.vatRate / 100);
         return (
           <div
             key={template.id}

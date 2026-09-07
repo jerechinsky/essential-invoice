@@ -5,9 +5,10 @@ import { toast } from 'sonner';
 import { api } from '../utils/api';
 import {
   Mail, Server, Eye, EyeOff, Calculator, Sparkles, FileText, Sun, Moon, Monitor,
-  Globe, Building, Landmark, Image, Lock, LogOut, ChevronRight, Check,
+  Globe, Building, Landmark, Image, Lock, LogOut, ChevronRight, Check, Download,
 } from 'lucide-react';
 import { PageLoader } from '../components/Spinner';
+import AccountantExport from '../components/AccountantExport';
 import StickySaveBar from '../components/StickySaveBar';
 import { SettingsGroup, SettingsRow, SettingsBackHeader, StatusValue, RowToggle } from '../components/SettingsList';
 import { useTheme } from '../context/ThemeContext';
@@ -41,11 +42,12 @@ interface Settings {
   aiModel: string | null;
 }
 
-type SectionKey = 'invoiceDefaults' | 'emailSending' | 'bankMatching' | 'ai' | 'calculator' | 'appearance' | 'language';
+type SectionKey = 'exports' | 'invoiceDefaults' | 'emailSending' | 'bankMatching' | 'ai' | 'calculator' | 'appearance' | 'language';
 
 /** Sections are routes (`/settings/<slug>`) so mobile can drill in and back out */
 const SECTIONS: Array<{ key: SectionKey; slug: string; icon: typeof Mail; headingKey: string; descriptionKey: string }> = [
   { key: 'invoiceDefaults', slug: 'invoicing', icon: FileText, headingKey: 'invoiceDefaults.heading', descriptionKey: 'invoiceDefaults.description' },
+  { key: 'exports', slug: 'exports', icon: Download, headingKey: 'exports.heading', descriptionKey: 'exports.description' },
   { key: 'emailSending', slug: 'email', icon: Mail, headingKey: 'smtp.heading', descriptionKey: 'smtp.description' },
   { key: 'bankMatching', slug: 'bank-matching', icon: Server, headingKey: 'imap.heading', descriptionKey: 'imap.description' },
   { key: 'ai', slug: 'ai', icon: Sparkles, headingKey: 'ai.heading', descriptionKey: 'ai.description' },
@@ -222,7 +224,8 @@ export default function Settings() {
   // No slug: the mobile index. Desktop ignores it and shows the first section.
   const activeSection = SECTIONS.find(s => s.slug === slug) ?? SECTIONS[0];
   const section = activeSection.key;
-  const isDirty = (Object.keys(EMPTY_FORM) as Array<keyof FormState>).some(key => formData[key] !== savedForm[key]);
+  const ContentContainer = section === 'exports' ? 'div' : 'form';
+  const isDirty = section !== 'exports' && (Object.keys(EMPTY_FORM) as Array<keyof FormState>).some(key => formData[key] !== savedForm[key]);
   const themeLabel = t(`appearance.${theme}`);
   const languageLabel = t(`language.${user?.language === 'en' ? 'en' : 'cs'}`);
 
@@ -333,6 +336,7 @@ export default function Settings() {
               })}
               to="/settings/invoicing"
             />
+            <SettingsRow icon={Download} tint="accent" label={t('exports.heading')} to="/settings/exports" />
             <SettingsRow
               icon={Mail}
               tint="accent"
@@ -427,12 +431,14 @@ export default function Settings() {
           </nav>
 
           {/* Content */}
-          <form onSubmit={handleSubmit} className="space-y-4 min-w-0">
+          <ContentContainer onSubmit={section === 'exports' ? undefined : handleSubmit} className="space-y-4 min-w-0">
             {/* Page head — on mobile the section title sits in the back header */}
             <div>
               <h2 className="hidden lg:block text-xl font-bold tracking-[-0.02em] text-text">{t(activeSection.headingKey)}</h2>
               <p className="lg:mt-1 text-[13px] text-text-muted">{t(activeSection.descriptionKey)}</p>
             </div>
+
+            {section === 'exports' && <AccountantExport />}
 
             {section === 'invoiceDefaults' && (
               <div className="card">
@@ -754,7 +760,7 @@ export default function Settings() {
               discardLabel={t('actions.discard')}
               onDiscard={() => setFormData(savedForm)}
             />
-          </form>
+          </ContentContainer>
           </div>
         </div>
       </div>

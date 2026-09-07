@@ -7,6 +7,7 @@ import { ArrowLeft, CalendarClock } from 'lucide-react';
 import { formatCurrency as formatCurrencyLocale, formatDate } from '../utils/format';
 import { useLineItems, LineItem } from '../hooks/useLineItems';
 import InvoiceItemsEditor from '../components/InvoiceItemsEditor';
+import { useAuth } from '../context/AuthContext';
 import { PageLoader } from '../components/Spinner';
 
 interface Client {
@@ -17,6 +18,7 @@ interface Client {
 
 export default function RecurringInvoiceCreate() {
   const { t } = useTranslation('invoices');
+  const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = !!id;
@@ -72,11 +74,15 @@ export default function RecurringInvoiceCreate() {
           quantity: item.quantity,
           unit: item.unit,
           unitPrice: item.unitPrice,
+          vatRate: item.vatRate,
+          vatTreatment: item.vatTreatment,
+          vatReason: item.vatReason,
+          vatCode: item.vatCode,
         })));
       } else {
         setFormData(prev => ({
           ...prev,
-          vatRate: settings.defaultVatRate ?? 21,
+          vatRate: user?.vatPayer === false ? 0 : (settings.defaultVatRate ?? 21),
           paymentTerms: settings.defaultPaymentTerms ?? 14,
         }));
       }
@@ -123,6 +129,7 @@ export default function RecurringInvoiceCreate() {
           ...item,
           quantity: Number(item.quantity),
           unitPrice: Number(item.unitPrice),
+          vatRate: item.vatTreatment === 'exempt' ? 0 : Number(item.vatRate ?? formData.vatRate),
         })),
       };
 
@@ -338,7 +345,7 @@ export default function RecurringInvoiceCreate() {
           onAddItem={addItem}
           onRemoveItem={removeItem}
           vatRate={formData.vatRate}
-          onVatRateChange={handleChange}
+          showVat={user?.vatPayer !== false}
           subtotal={subtotal}
           vatAmount={vatAmount}
           total={total}

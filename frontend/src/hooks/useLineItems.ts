@@ -1,10 +1,17 @@
 import { useState } from 'react';
+import { calculateInvoiceTax } from '../utils/money';
 
 export interface LineItem {
   description: string;
   quantity: number;
   unit: string;
   unitPrice: number;
+  vatRate?: number;
+  vatTreatment?: 'standard' | 'exempt' | 'reverse_charge';
+  vatReason?: string;
+  vatCode?: string;
+  vatAmount?: number;
+  total?: number;
 }
 
 export function emptyLineItem(): LineItem {
@@ -20,7 +27,7 @@ export function useLineItems(vatRate: number | string) {
 
   function handleItemChange(index: number, field: keyof LineItem, value: string | number) {
     setItems(prev => prev.map((item, i) =>
-      i === index ? { ...item, [field]: value } : item
+      i === index ? { ...item, [field]: value, ...(field === 'vatTreatment' && value === 'exempt' ? { vatRate: 0 } : {}) } : item
     ));
   }
 
@@ -32,12 +39,10 @@ export function useLineItems(vatRate: number | string) {
     setItems(prev => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
   }
 
-  const subtotal = items.reduce(
-    (sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)),
-    0
+  const { subtotal, vatAmount, total, breakdown } = calculateInvoiceTax(
+    items.map(item => ({ ...item, quantity: Number(item.quantity) || 0, unitPrice: Number(item.unitPrice) || 0 })),
+    Number(vatRate) || 0
   );
-  const vatAmount = subtotal * ((Number(vatRate) || 0) / 100);
-  const total = subtotal + vatAmount;
 
-  return { items, setItems, handleItemChange, addItem, removeItem, subtotal, vatAmount, total };
+  return { items, setItems, handleItemChange, addItem, removeItem, subtotal, vatAmount, total, breakdown };
 }

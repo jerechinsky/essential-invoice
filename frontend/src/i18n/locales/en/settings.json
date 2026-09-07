@@ -130,5 +130,9 @@
     "light": "Light",
     "dark": "Dark",
     "system": "System"
+  },
+  "exports": {
+    "heading": "Exports",
+    "description": "Accounting documents for a selected period."
   }
 }

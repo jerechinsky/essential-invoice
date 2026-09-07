@@ -1,3 +1,4 @@
+import { CollapsibleVatBreakdown } from '../components/VatBreakdown';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -33,12 +34,13 @@ export default function InvoiceCreate() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [defaultVatRate, setDefaultVatRate] = useState<number>(21);
+  const [differentTaxDate, setDifferentTaxDate] = useState(false);
   const [tierInfo, setTierInfo] = useState<{ limit: number; invoiced: number } | null>(null);
 
   const [formData, setFormData] = useState({
     clientId: '',
     issueDate: new Date().toISOString().split('T')[0],
+    deliveryDate: '',
     dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     currency: 'CZK',
     vatRate: 21,
@@ -63,7 +65,7 @@ export default function InvoiceCreate() {
         api.get('/dashboard').catch(() => null),
       ]);
       setClients(clientsData);
-      setDefaultVatRate(settings.defaultVatRate ?? 21);
+
       if (dashboard?.pausalniDan?.enabled) {
         setTierInfo({
           limit: dashboard.pausalniDan.limit,
@@ -73,9 +75,11 @@ export default function InvoiceCreate() {
 
       if (isEdit) {
         const invoice = await api.get(`/invoices/${id}`);
+        setDifferentTaxDate(Boolean(invoice.deliveryDate && invoice.deliveryDate.split('T')[0] !== invoice.issueDate.split('T')[0]));
         setFormData({
           clientId: invoice.clientId,
           issueDate: invoice.issueDate.split('T')[0],
+          deliveryDate: invoice.deliveryDate?.split('T')[0] || '',
           dueDate: invoice.dueDate.split('T')[0],
           currency: invoice.currency,
           vatRate: invoice.vatRate,
@@ -86,6 +90,10 @@ export default function InvoiceCreate() {
           quantity: item.quantity,
           unit: item.unit,
           unitPrice: item.unitPrice,
+          vatRate: item.vatRate,
+          vatTreatment: item.vatTreatment,
+          vatReason: item.vatReason,
+          vatCode: item.vatCode,
         })));
       } else if (duplicateId) {
         // Duplicate an existing invoice with fresh dates
@@ -96,6 +104,7 @@ export default function InvoiceCreate() {
         setFormData({
           clientId: invoice.clientId,
           issueDate: today,
+          deliveryDate: today,
           dueDate,
           currency: invoice.currency,
           vatRate: invoice.vatRate,
@@ -106,6 +115,10 @@ export default function InvoiceCreate() {
           quantity: item.quantity,
           unit: item.unit,
           unitPrice: item.unitPrice,
+          vatRate: item.vatRate,
+          vatTreatment: item.vatTreatment,
+          vatReason: item.vatReason,
+          vatCode: item.vatCode,
         })));
       } else {
         // Apply default settings for new invoices
@@ -113,7 +126,7 @@ export default function InvoiceCreate() {
         const dueDate = new Date(Date.now() + paymentTerms * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         setFormData(prev => ({
           ...prev,
-          vatRate: settings.defaultVatRate ?? 21,
+          vatRate: user?.vatPayer === false ? 0 : (settings.defaultVatRate ?? 21),
           dueDate,
           // Preselect the client when arriving from the contact list's new-invoice action
           clientId: preselectedClientId && clientsData.some((c: Client) => c.id === preselectedClientId)
@@ -153,11 +166,13 @@ export default function InvoiceCreate() {
     try {
       const payload = {
         ...formData,
+        deliveryDate: differentTaxDate ? formData.deliveryDate : formData.issueDate,
         vatRate: Number(formData.vatRate),
         items: items.map(item => ({
           ...item,
           quantity: Number(item.quantity),
           unitPrice: Number(item.unitPrice),
+          vatRate: item.vatTreatment === 'exempt' ? 0 : Number(item.vatRate ?? formData.vatRate),
         })),
       };
 
@@ -185,7 +200,6 @@ export default function InvoiceCreate() {
   };
 
   const selectedClient = clients.find(c => c.id === formData.clientId) || null;
-  const isDefaultVat = Number(formData.vatRate) === defaultVatRate;
 
   // Tier impact (CZK invoices only — EUR needs a CNB rate we don't have client-side)
   const tierImpact =
@@ -240,7 +254,7 @@ export default function InvoiceCreate() {
       </div>
 
       <form id="invoice-form" onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_1fr] gap-4 lg:gap-5">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-4 lg:gap-5">
           {/* Left column */}
           <div className="space-y-4">
             {/* Client */}
@@ -321,6 +335,19 @@ export default function InvoiceCreate() {
                   </select>
                 </div>
               </div>
+              <label className="mt-3 flex items-center gap-2 text-xs text-text-muted cursor-pointer">
+                <input type="checkbox" checked={differentTaxDate}
+                  onChange={e => {
+                    setDifferentTaxDate(e.target.checked);
+                    if (e.target.checked) setFormData(prev => ({ ...prev, deliveryDate: prev.issueDate }));
+                  }} className="accent-accent" />
+                {t('tax.differentDate')}
+              </label>
+              {differentTaxDate && <div className="mt-3 sm:max-w-xs">
+                <label htmlFor="deliveryDate" className="label">{t('export.taxPointDate')}</label>
+                <input type="date" id="deliveryDate" name="deliveryDate" className="input tabular-nums"
+                  required value={formData.deliveryDate} onChange={handleChange} />
+              </div>}
             </div>
 
             {/* Items */}
@@ -330,7 +357,7 @@ export default function InvoiceCreate() {
               onAddItem={addItem}
               onRemoveItem={removeItem}
               vatRate={formData.vatRate}
-              onVatRateChange={handleChange}
+              showVat={user?.vatPayer !== false}
               subtotal={subtotal}
               vatAmount={vatAmount}
               total={total}
@@ -372,28 +399,10 @@ export default function InvoiceCreate() {
                   <span className="text-sm text-text tabular-nums">{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2">
-                    <span className="text-[13px] text-text-muted">{t('create.vat')}</span>
-                    {isDefaultVat && (
-                      <span className="text-[11px] bg-surface-sunken text-text-muted rounded-full px-2 py-0.5">
-                        {t('create.vatDefaultBadge')}
-                      </span>
-                    )}
-                  </span>
-                  <span className="flex items-center gap-2.5">
-                    <select
-                      name="vatRate"
-                      value={formData.vatRate}
-                      onChange={handleChange}
-                      className="bg-surface text-text border border-border rounded-[9px] px-2.5 py-1.5 text-[13px] focus:outline-hidden focus:border-accent"
-                    >
-                      <option value="0">0 %</option>
-                      <option value="12">12 %</option>
-                      <option value="21">21 %</option>
-                    </select>
-                    <span className="text-sm text-text-muted tabular-nums">{formatCurrency(vatAmount)}</span>
-                  </span>
+                  <span className="text-[13px] text-text-muted">{t('create.vat')}</span>
+                  <span className="text-sm text-text tabular-nums">{formatCurrency(vatAmount)}</span>
                 </div>
+                <CollapsibleVatBreakdown items={items} defaultRate={Number(formData.vatRate)} formatCurrency={formatCurrency} />
                 <div className="flex justify-between items-baseline pt-3 border-t border-hairline">
                   <span className="text-sm font-semibold text-text">{t('create.total')}</span>
                   <span className="text-[28px] leading-tight font-bold tracking-[-0.02em] text-accent tabular-nums">
@@ -462,9 +471,9 @@ export default function InvoiceCreate() {
                       </span>
                     </div>
                   ))}
-                  {Number(formData.vatRate) > 0 && (
+                  {vatAmount > 0 && (
                     <div className="grid grid-cols-[1fr_auto] gap-2 py-1 text-[11px] border-t border-[#eef0f6] mt-1 pt-1.5">
-                      <span className="text-[#5c6079]">DPH {formData.vatRate} %</span>
+                      <span className="text-[#5c6079]">{t('create.vat')}</span>
                       <span className="text-right tabular-nums">{formatCurrency(vatAmount)}</span>
                     </div>
                   )}

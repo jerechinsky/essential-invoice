@@ -1,3 +1,5 @@
+import VatBreakdown, { LineVatLabel } from '../components/VatBreakdown';
+import type { LineItem } from '../hooks/useLineItems';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -21,7 +23,7 @@ import { useAI } from '../context/AIContext';
 import ReminderComposer from '../components/ReminderComposer';
 import { useObjectUrl, PDF_PREVIEW_PARAMS } from '../hooks/useObjectUrl';
 
-interface InvoiceItem {
+interface InvoiceItem extends LineItem {
   id: string;
   description: string;
   quantity: number;
@@ -140,6 +142,15 @@ export default function InvoiceDetail() {
       toast.error(t('common:errors.loadFailed'));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDownloadISDOC() {
+    if (!invoice) return;
+    try {
+      await api.download(`/invoices/${id}/isdoc`, `${invoice.invoiceNumber}.isdoc`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('detail.downloadError'));
     }
   }
 
@@ -277,6 +288,7 @@ export default function InvoiceDetail() {
         <h1 className="text-base font-semibold text-text tabular-nums">{invoice.invoiceNumber}</h1>
         {statusPill}
         <div className="ml-auto flex items-center gap-2">
+          <button onClick={handleDownloadISDOC} className="btn btn-secondary">{t('export.isdoc')}</button>
           <button onClick={handleDownloadPDF} className="btn btn-secondary flex items-center space-x-2">
             <Download className="h-4 w-4" />
             <span>{t('detail.pdf')}</span>
@@ -350,6 +362,8 @@ export default function InvoiceDetail() {
             {formatCurrency(invoice.total, invoice.currency)}
           </p>
           <div className="mt-2">{statusPill}</div>
+          <div className="mt-4"><VatBreakdown items={invoice.items} defaultRate={invoice.vatRate} formatCurrency={amount => formatCurrency(amount, invoice.currency)} /></div>
+          <button onClick={handleDownloadISDOC} className="btn btn-secondary mt-4">{t('export.isdoc')}</button>
         </div>
       </div>
 
@@ -416,7 +430,7 @@ export default function InvoiceDetail() {
                 key={item.id}
                 className="grid grid-cols-[2.6fr_0.9fr_1fr_1fr] gap-x-4 py-3 border-b border-hairline-soft last:border-b-0"
               >
-                <span className="text-sm text-text">{item.description}</span>
+                <span className="text-sm text-text">{item.description}<LineVatLabel item={item} defaultRate={invoice.vatRate} /></span>
                 <span className="text-sm text-text-secondary text-right tabular-nums">
                   {item.quantity} {item.unit}
                 </span>
@@ -436,14 +450,8 @@ export default function InvoiceDetail() {
                     {formatCurrency(invoice.subtotal, invoice.currency)}
                   </span>
                 </div>
-                <div className="flex justify-between items-baseline">
-                  <span className="text-[13px] text-text-muted">
-                    {t('detail.vatWithRate', { rate: invoice.vatRate })}
-                  </span>
-                  <span className="text-sm text-text tabular-nums">
-                    {formatCurrency(invoice.vatAmount, invoice.currency)}
-                  </span>
-                </div>
+                <VatBreakdown items={invoice.items} defaultRate={invoice.vatRate}
+                  formatCurrency={amount => formatCurrency(amount, invoice.currency)} />
                 <div className="flex justify-between items-baseline pt-2 border-t border-hairline">
                   <span className="text-sm font-semibold text-text">{t('detail.total')}</span>
                   <span className="text-[26px] leading-tight font-bold tracking-[-0.02em] text-accent tabular-nums">

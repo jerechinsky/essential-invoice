@@ -1,7 +1,7 @@
 import { query, pool } from '../db/init';
 import { generateInvoiceNumber } from '../routes/invoices';
 import { generateSpayd } from '../utils/validation';
-import { calculateLineTotal, calculateInvoiceTotals } from '../utils/money';
+import { calculateLineTotal, calculateInvoiceTax } from '../utils/money';
 import { sendInvoiceEmail } from './emailSender';
 import { convertEurToCzk } from './cnbExchangeRate';
 import { log } from '../utils/logger';
@@ -63,9 +63,13 @@ export async function generateInvoiceFromRecurring(template: RecurringInvoiceRow
     // Calculate totals (rounded to 2 decimals at every step)
     const lineItems = itemsResult.rows.map(item => ({
       quantity: parseFloat(item.quantity),
-      unitPrice: parseFloat(item.unit_price)
+      unitPrice: parseFloat(item.unit_price),
+      vatRate: Number(item.vat_rate ?? vatRate),
+      vatTreatment: item.vat_treatment ?? 'standard',
+      vatCode: item.vat_code ?? '',
+        vatReason: item.vat_reason ?? ''
     }));
-    const { subtotal, vatAmount, total } = calculateInvoiceTotals(lineItems, vatRate);
+    const { subtotal, vatAmount, total, lines } = calculateInvoiceTax(lineItems, vatRate);
 
     // Get user's bank details for QR code
     const userResult = await query(
@@ -131,9 +135,9 @@ export async function generateInvoiceFromRecurring(template: RecurringInvoiceRow
       const item = itemsResult.rows[i];
       const itemTotal = calculateLineTotal({ quantity: parseFloat(item.quantity), unitPrice: parseFloat(item.unit_price) });
       await query(
-        `INSERT INTO invoice_items (invoice_id, description, quantity, unit, unit_price, total, sort_order)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [invoice.id, item.description, item.quantity, item.unit, item.unit_price, itemTotal, i]
+        `INSERT INTO invoice_items (invoice_id, description, quantity, unit, unit_price, total, sort_order, vat_rate, vat_treatment, vat_reason, vat_amount, vat_code)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [invoice.id, item.description, item.quantity, item.unit, item.unit_price, itemTotal, i, lines[i].vatRate, lines[i].vatTreatment, lines[i].vatReason, lines[i].vatAmount, lines[i].vatCode || '']
       );
     }
 

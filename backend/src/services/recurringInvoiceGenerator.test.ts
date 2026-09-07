@@ -73,6 +73,28 @@ describe('Recurring Invoice Generator', () => {
     active: true,
   };
 
+  it('copies mixed VAT treatments and their calculated taxes into generated invoices', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM recurring_invoice_items')) return { rows: [
+        { description: 'Standard', quantity: '1', unit: 'ks', unit_price: '100', vat_rate: '21', vat_treatment: 'standard' },
+        { description: 'Reduced', quantity: '1', unit: 'ks', unit_price: '100', vat_rate: '12', vat_treatment: 'standard' },
+        { description: 'Reverse', quantity: '1', unit: 'ks', unit_price: '100', vat_rate: '21', vat_treatment: 'reverse_charge', vat_code: '4' },
+      ] };
+      if (sql.includes('FROM users')) return { rows: [{}] };
+      if (sql.includes('INSERT INTO invoices')) return { rows: [{ id: 'mixed-inv', invoice_number: 'FV20260301' }] };
+      return { rows: [] };
+    });
+    const result = await generateInvoiceFromRecurring(baseTemplate);
+    expect(result.success).toBe(true);
+    const invoice = mockQuery.mock.calls.find(([sql]) => sql.includes('INSERT INTO invoices'))!;
+    expect(invoice[1].slice(8, 12)).toEqual([300, 21, 33, 333]);
+    const lines = mockQuery.mock.calls.filter(([sql]) => sql.includes('INSERT INTO invoice_items'));
+    expect(lines.map(([, values]) => values.slice(7))).toEqual([
+      [21, 'standard', '', 21, ''], [12, 'standard', '', 12, ''], [21, 'reverse_charge', '', 0, '4'],
+    ]);
+    mockQuery.mockReset();
+  });
+
   it('should generate an invoice from a recurring template', async () => {
     mockIdempotencyCheckPass();
     // Mock items query

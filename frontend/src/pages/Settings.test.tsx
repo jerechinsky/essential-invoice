@@ -6,11 +6,13 @@ import Settings from './Settings';
 // Mock the API
 const mockGet = vi.fn();
 const mockPut = vi.fn();
+const mockDownload = vi.fn();
 
 vi.mock('../utils/api', () => ({
   api: {
     get: (...args: unknown[]) => mockGet(...args),
     put: (...args: unknown[]) => mockPut(...args),
+    download: (...args: unknown[]) => mockDownload(...args),
     post: vi.fn()
   }
 }));
@@ -226,4 +228,19 @@ describe('Settings Component', () => {
       expect(screen.queryByRole('button', { name: /uložit nastavení/i })).not.toBeInTheDocument();
     });
   });
+});
+
+it('opens accountant exports from the settings index and downloads without saving settings', async () => {
+  vi.clearAllMocks();
+  mockGet.mockResolvedValue(defaultSettings);
+  mockDownload.mockResolvedValue(undefined);
+  renderAt('/settings');
+  const index = await screen.findByTestId('settings-index');
+  fireEvent.click(within(index).getByRole('link', { name: 'Exporty' }));
+  const download = await screen.findByRole('button', { name: 'Stáhnout ZIP' });
+  expect(download.closest('form')?.parentElement?.closest('form')).toBeNull();
+  fireEvent.click(download);
+  await waitFor(() => expect(mockDownload).toHaveBeenCalled());
+  expect(mockPut).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: 'Uložit změny' })).not.toBeInTheDocument();
 });

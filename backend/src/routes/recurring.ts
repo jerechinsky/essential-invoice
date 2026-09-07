@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { query } from '../db/init';
+import { vatValidation } from '../utils/vatValidation';
+import { calculateInvoiceTax } from '../utils/money';
 import { AuthRequest } from '../middleware/auth';
 import { generateInvoiceFromRecurring } from '../services/recurringInvoiceGenerator';
 
@@ -11,8 +13,11 @@ recurringRouter.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const result = await query(
       `SELECT ri.*, c.company_name as client_name, c.primary_email as client_email,
-              (SELECT COALESCE(SUM(rii.quantity * rii.unit_price), 0)
-               FROM recurring_invoice_items rii WHERE rii.recurring_invoice_id = ri.id) as subtotal
+              (SELECT COALESCE(SUM(ROUND(rii.quantity * rii.unit_price, 2)), 0)
+               FROM recurring_invoice_items rii WHERE rii.recurring_invoice_id = ri.id) as subtotal,
+              (SELECT json_agg(json_build_object('quantity', rii.quantity, 'unitPrice', rii.unit_price,
+                'vatRate', COALESCE(rii.vat_rate, ri.vat_rate), 'vatTreatment', rii.vat_treatment))
+               FROM recurring_invoice_items rii WHERE rii.recurring_invoice_id = ri.id) as tax_items
        FROM recurring_invoices ri
        JOIN clients c ON ri.client_id = c.id
        WHERE ri.user_id = $1
@@ -35,6 +40,7 @@ recurringRouter.get('/', async (req: AuthRequest, res: Response) => {
       autoSend: row.auto_send,
       active: row.active,
       subtotal: parseFloat(row.subtotal),
+      total: row.tax_items ? calculateInvoiceTax(row.tax_items, Number(row.vat_rate)).total : undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -90,6 +96,10 @@ recurringRouter.get('/:id', async (req: AuthRequest, res: Response) => {
         quantity: parseFloat(item.quantity),
         unit: item.unit,
         unitPrice: parseFloat(item.unit_price),
+        vatRate: Number(item.vat_rate ?? row.vat_rate),
+        vatTreatment: item.vat_treatment ?? 'standard',
+        vatCode: item.vat_code ?? '',
+        vatReason: item.vat_reason ?? '',
       })),
     };
 
@@ -107,6 +117,10 @@ recurringRouter.post('/',
   body('startDate').isISO8601(),
   body('items').isArray({ min: 1 }),
   body('items.*.description').isLength({ max: 150 }),
+  ...vatValidation(),
+  body('items.*.quantity').isFloat({ gt: 0 }),
+  body('items.*.unitPrice').isFloat({ min: 0 }),
+  body('currency').optional().isIn(['CZK', 'EUR']),
   body('notes').optional().isLength({ max: 300 }),
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -167,9 +181,9 @@ recurringRouter.post('/',
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         await query(
-          `INSERT INTO recurring_invoice_items (recurring_invoice_id, description, quantity, unit, unit_price, sort_order)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [template.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, i]
+          `INSERT INTO recurring_invoice_items (recurring_invoice_id, description, quantity, unit, unit_price, sort_order, vat_rate, vat_treatment, vat_reason, vat_code)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [template.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, i, item.vatTreatment === 'exempt' ? 0 : (item.vatRate ?? vatRate), item.vatTreatment ?? 'standard', item.vatReason?.trim() || '', item.vatCode || '']
         );
       }
 
@@ -189,6 +203,10 @@ recurringRouter.post('/',
 recurringRouter.put('/:id',
   body('items').optional().isArray({ min: 1 }),
   body('items.*.description').optional().isLength({ max: 150 }),
+  ...vatValidation(),
+  body('items.*.quantity').isFloat({ gt: 0 }),
+  body('items.*.unitPrice').isFloat({ min: 0 }),
+  body('currency').optional().isIn(['CZK', 'EUR']),
   body('notes').optional().isLength({ max: 300 }),
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -207,6 +225,14 @@ recurringRouter.put('/:id',
 
       if (existing.rows.length === 0) {
         return res.status(404).json({ error: 'Recurring invoice not found' });
+      }
+
+      if (clientId) {
+        const owner = await query('SELECT id FROM clients WHERE id = $1 AND user_id = $2', [clientId, req.userId]);
+        if (!owner.rows.length) return res.status(400).json({ error: 'Invalid client' });
+      }
+      if (vatRate !== undefined && !items) {
+        return res.status(400).json({ error: 'Include items when changing VAT' });
       }
 
       // Recalculate next_generation_date if dayOfMonth changed
@@ -245,9 +271,9 @@ recurringRouter.put('/:id',
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
           await query(
-            `INSERT INTO recurring_invoice_items (recurring_invoice_id, description, quantity, unit, unit_price, sort_order)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [req.params.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, i]
+            `INSERT INTO recurring_invoice_items (recurring_invoice_id, description, quantity, unit, unit_price, sort_order, vat_rate, vat_treatment, vat_reason, vat_code)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [req.params.id, item.description, item.quantity, item.unit || 'ks', item.unitPrice, i, item.vatTreatment === 'exempt' ? 0 : (item.vatRate ?? vatRate ?? Number(existing.rows[0].vat_rate)), item.vatTreatment ?? 'standard', item.vatReason?.trim() || '', item.vatCode || '']
           );
         }
       }

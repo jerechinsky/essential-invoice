@@ -30,6 +30,7 @@ All endpoints require JWT authentication unless noted otherwise. Include the tok
 - `GET /api/invoices` - List invoices (filters: status, clientId, from, to)
 - `GET /api/invoices/:id` - Get invoice with items
 - `GET /api/invoices/:id/pdf` - Download PDF
+- `GET /api/invoices/:id/isdoc` - Download unsigned ISDOC 6.0.2 XML (CZK/EUR)
 - `POST /api/invoices` - Create invoice (items require positive `quantity`, non-negative `unitPrice`; `vatRate` 0–100; `currency` CZK or EUR)
 - `PUT /api/invoices/:id` - Update invoice (content edits only on drafts; `status` changes must follow legal transitions: draft→sent/cancelled, sent→paid/overdue/cancelled, overdue→paid/cancelled — paid and cancelled are terminal)
 - `DELETE /api/invoices/:id` - Delete draft invoice
@@ -40,6 +41,35 @@ All endpoints require JWT authentication unless noted otherwise. Include the tok
 - `GET /api/invoices/:id/preview` - Preview invoice email before sending
 
 EUR invoices include `exchangeRate` (CNB rate at issue date) and `totalCzk` (converted CZK equivalent) in responses. These are auto-fetched from the Czech National Bank when the invoice is created or updated. Dashboard totals and paušální daň tracking use the CZK equivalent for EUR invoices.
+
+### Per-line VAT
+
+Invoice and recurring-template items accept `vatRate` (0–100, up to two decimal places), `vatTreatment` (`standard`, `exempt`, `reverse_charge`), `vatReason` (up to 300 characters), and `vatCode` (domestic reverse-charge supply code, up to 20 characters). Omitted line rates inherit the invoice/template `vatRate`; omitted treatment means `standard`. Invoice-level `vatRate` remains the default, not a representation of mixed rates.
+
+Exempt lines require a nonblank reason/legal reference and a zero rate (or no rate). Reverse-charge lines require a numeric supply code, optionally containing a decimal point; their rate records the applicable rate but supplier VAT is zero. Applicability of the chosen treatment/code remains an accounting decision. Standard 0% is distinct from exemption. Invoice responses expose the stored line `vatAmount` and tax-exclusive `total`. The server calculates all monetary totals and ignores submitted line totals/taxes.
+
+Line bases are rounded to two decimal places, grouped by rate and treatment, then VAT is rounded per group. Cumulative allocation distributes group VAT to lines without losing cents. Old single-rate invoices retain their recorded totals during migration. Recurring generation uses the same calculation; the template list includes its calculated `total`.
+
+`deliveryDate` records the tax-point date and defaults to `issueDate`. Include `items` when editing an invoice's VAT default, currency, or issue date, or a recurring template's VAT default. An omitted VAT default on edit preserves the saved default. Recalculation refreshes EUR conversions; switching to CZK clears them.
+
+### Accountant export
+
+`GET /api/exports/accountant?from=2026-09-01&to=2026-09-30&basis=issue` downloads a ZIP. Both ISO calendar dates are required and inclusive; `basis` is `issue` (default) or `tax` (delivery date, falling back to issue date). Maximum range: 367 days; maximum selection: 500 documents and 100 MB of uncompressed files. Each process allows one active export per user.
+
+The package includes sent, overdue and paid invoices plus all expenses in the period. Draft/cancelled invoices and recurring templates are excluded. Files:
+
+- `issued-invoices.csv`: header totals, counterparties, dates, status, currency, stored exchange rate/CZK total, and paths to PDFs/ISDOC.
+- `issued-lines.csv`: item quantities/prices, VAT rates, treatments, reasons, supply codes and amounts.
+- `issued-vat.csv`: issued bases and VAT grouped per invoice/rate/treatment; currencies remain separate.
+- `received-expenses.csv`: expense-level amounts/VAT, supplier data and attachment paths. Input-VAT deductibility is not inferred.
+- `issued/`: invoice PDFs and ISDOC files; `received/`: original expense attachments.
+- `manifest.json` and `README.txt`: counts, period, selection rules and file-format notes.
+
+CSV uses UTF-8 with BOM, semicolons, quoted cells and decimal points. Formula-like text is prefixed with an apostrophe. Filenames are sanitized and include document IDs. Missing EUR conversions stay empty in expense CSVs. No VAT return/control-statement XML, ISDOC import or ISDOCX is included.
+
+ISDOC uses the official [6.0.2 schema](https://isdoc.github.io/), ordinary invoice document type, CZK local amounts and EUR foreign amounts when applicable. It requires stored totals to reconcile and a valid exchange rate for EUR invoices; failure aborts the package with a specific error rather than silently omitting a document. The standard's supply-code field and VAT note carry domestic reverse charge and exemption reasons. Unknown structured address fields are left empty while preserving the existing free-form address; supplier/client details come from the current profiles, as in PDFs. Downloads do not alter invoice status or send email.
+
+Errors: `400` invalid dates/tax data, missing EUR rate or inconsistent invoice totals; `404` invoice absent/not owned; `409` attachment changed during export; `413` selection too large; `429` another export running. Standard authentication applies to every download; files are sent with `Cache-Control: no-store`.
 
 ## Recurring Invoices
 
