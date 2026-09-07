@@ -1,3 +1,4 @@
+import InvoiceDownloadMenu from '../components/InvoiceDownloadMenu';
 import VatBreakdown, { LineVatLabel } from '../components/VatBreakdown';
 import type { LineItem } from '../hooks/useLineItems';
 import { useState, useEffect, useRef } from 'react';
@@ -288,11 +289,7 @@ export default function InvoiceDetail() {
         <h1 className="text-base font-semibold text-text tabular-nums">{invoice.invoiceNumber}</h1>
         {statusPill}
         <div className="ml-auto flex items-center gap-2">
-          <button onClick={handleDownloadISDOC} className="btn btn-secondary">{t('export.isdoc')}</button>
-          <button onClick={handleDownloadPDF} className="btn btn-secondary flex items-center space-x-2">
-            <Download className="h-4 w-4" />
-            <span>{t('detail.pdf')}</span>
-          </button>
+          <InvoiceDownloadMenu onPdf={handleDownloadPDF} onIsdoc={handleDownloadISDOC} />
           <button
             onClick={() => navigate(`/invoices/new?duplicate=${id}`)}
             className="btn btn-secondary flex items-center space-x-2"
@@ -363,7 +360,7 @@ export default function InvoiceDetail() {
           </p>
           <div className="mt-2">{statusPill}</div>
           <div className="mt-4"><VatBreakdown items={invoice.items} defaultRate={invoice.vatRate} formatCurrency={amount => formatCurrency(amount, invoice.currency)} /></div>
-          <button onClick={handleDownloadISDOC} className="btn btn-secondary mt-4">{t('export.isdoc')}</button>
+          <div className="mt-4"><InvoiceDownloadMenu onPdf={handleDownloadPDF} onIsdoc={handleDownloadISDOC} align="start" /></div>
         </div>
       </div>
 

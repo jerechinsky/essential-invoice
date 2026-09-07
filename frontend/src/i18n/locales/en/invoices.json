@@ -175,7 +175,10 @@
       "paid": "Paid",
       "awaitingPayment": "Awaiting payment",
       "cancelled": "Cancelled"
-    }
+    },
+    "download": "Download",
+    "pdfDescription": "For viewing, printing and sharing",
+    "isdocDescription": "For import into accounting software"
   },
   "recurring": {
     "list": {

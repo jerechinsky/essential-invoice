@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import InvoiceDetail from './InvoiceDetail';
+import { api } from '../utils/api';
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -82,6 +83,39 @@ function renderPage(invoice: Record<string, unknown>) {
 describe('InvoiceDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it.each([['desktop', 0], ['mobile', 1]] as const)('downloads the selected format from the %s menu', async (_layout, index) => {
+    renderPage(baseInvoice);
+    const trigger = (await screen.findAllByRole('button', { name: 'Stáhnout' }))[index];
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    for (const format of ['PDF', 'ISDOC']) {
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole('menuitem', { name: format }));
+      await waitFor(() => expect(api.download).toHaveBeenLastCalledWith(
+        `/invoices/inv-1/${format.toLowerCase()}`, `2026-042.${format.toLowerCase()}`,
+      ));
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    }
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('supports keyboard selection and dismisses the download menu with Escape or an outside click', async () => {
+    renderPage(baseInvoice);
+    const trigger = (await screen.findAllByRole('button', { name: 'Stáhnout' }))[0];
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitem', { name: 'PDF' })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitem', { name: 'ISDOC' })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.keyDown(trigger, { key: 'ArrowUp' });
+    expect(screen.getByRole('menuitem', { name: 'ISDOC' })).toHaveFocus();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(api.download).not.toHaveBeenCalled();
   });
 
   it('renders the timeline with created, sent and awaiting events for a sent invoice', async () => {

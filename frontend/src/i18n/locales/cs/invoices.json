@@ -178,7 +178,10 @@
       "paid": "Zaplaceno",
       "awaitingPayment": "Čeká na zaplacení",
       "cancelled": "Zrušeno"
-    }
+    },
+    "download": "Stáhnout",
+    "pdfDescription": "Pro zobrazení, tisk a sdílení",
+    "isdocDescription": "Pro import do účetního programu"
   },
   "recurring": {
     "list": {
