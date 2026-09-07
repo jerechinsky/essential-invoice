@@ -346,6 +346,11 @@
   },
   "export": {
     "title": "Export pro účetní",
+    "dphTitle": "Součástí jsou podklady pro DPH",
+    "dphDescription": "Přehledy DPH v CZK, evidence dokladů a kontrola úplnosti pro vaši účetní.",
+    "dphScope": "DPH u nákladů je pouze evidovaná, nikoli potvrzený nárok na odpočet. Balíček nepočítá daň k úhradě ani nevytváří XML daňových podání.",
+    "dphIssueDateHint": "Pro podklady k DPH zvažte výběr podle data zdanitelného plnění. Datum vystavení nemusí odpovídat období DPH.",
+    "dphTaxDateHint": "Datum plnění určuje výběr dokladů. Období uplatnění odpočtu DPH u nákladů musí ještě ověřit účetní.",
     "description": "Stáhněte ZIP s PDF fakturami, soubory ISDOC, CSV přehledy a přílohami nákladů.",
     "from": "Od",
     "to": "Do",

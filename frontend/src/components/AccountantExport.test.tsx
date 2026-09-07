@@ -11,10 +11,14 @@ beforeEach(() => vi.resetAllMocks());
 it('downloads the chosen accounting period and basis through the authenticated API', async () => {
   vi.mocked(api.download).mockResolvedValue(undefined);
   render(<AccountantExport />);
+  expect(screen.getByRole('heading', { name: 'Součástí jsou podklady pro DPH' })).toBeInTheDocument();
+  expect(screen.getByText(/nikoli potvrzený nárok na odpočet/)).toBeInTheDocument();
+  expect(screen.getByLabelText('Vybrat doklady podle')).toHaveAccessibleDescription(/Datum vystavení nemusí odpovídat období DPH/);
   fireEvent.click(screen.getByText('Export pro účetní'));
   fireEvent.change(screen.getByLabelText('Od'), { target: { value: '2026-08-01' } });
   fireEvent.change(screen.getByLabelText('Do'), { target: { value: '2026-08-31' } });
   fireEvent.change(screen.getByLabelText('Vybrat doklady podle'), { target: { value: 'tax' } });
+  expect(screen.getByLabelText('Vybrat doklady podle')).toHaveAccessibleDescription(/Období uplatnění odpočtu DPH/);
   fireEvent.click(screen.getByRole('button', { name: 'Stáhnout ZIP' }));
   await waitFor(() => expect(api.download).toHaveBeenCalledWith('/exports/accountant?from=2026-08-01&to=2026-08-31&basis=tax', 'accountant-2026-08-01-2026-08-31.zip'));
   expect(toast.success).toHaveBeenCalled();

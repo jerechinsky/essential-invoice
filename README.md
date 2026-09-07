@@ -36,6 +36,8 @@ The item VAT selector inherits your saved default; exemption and reverse-charge 
 
 Open **Settings → Exports** to select a period by issue or tax-point date and download the ZIP. It includes issued invoices (sent, overdue, paid) and expenses, with a limit of 500 documents / 100 MB. Use **Download → PDF / ISDOC** on an invoice to download an individual file immediately. This release exports accounting records; it does not generate VAT return/control-statement XML or import ISDOC. See the [API reference](docs/api-reference.md#accountant-export) for package contents and format details.
 
+Every accountant ZIP also includes **DPH preparation**: CZK summaries by VAT rate/treatment, a document register linked to supporting files, and a bilingual completeness/review report. Missing conversions remain blank and affected totals are marked incomplete. Received VAT is recorded VAT only, not a confirmed deduction; the pack does not calculate VAT payable. For DPH preparation, consider selecting by tax-point date and have your accountant confirm expense deduction periods and transaction classifications.
+
 ## Quick Start
 
 ### Prerequisites

@@ -4,6 +4,7 @@ import { generateInvoicePDF } from './pdfGenerator';
 import { buildISDOC } from './isdocGenerator';
 import { documentDate, ExportError, loadInvoiceDocument, safeFilename } from './invoiceDocument';
 import { roundMoney, summarizeStoredTax } from '../utils/money';
+import { buildDphPreparation, dphReadme, type DphDocument } from './dphPreparation';
 
 export function csv(rows: unknown[][]): Buffer {
   // Quote every cell and neutralize spreadsheet formulas, including leading
@@ -57,6 +58,7 @@ export async function generateAccountantExport(userId: string, period: ReturnTyp
   const lineCsv: unknown[][] = [['invoice_id', 'invoice_number', 'line', 'description', 'quantity', 'unit', 'unit_price', 'currency', 'tax_base', 'vat_rate', 'vat_treatment', 'vat_reason', 'reverse_charge_code', 'vat', 'total']];
   const expenseCsv: unknown[][] = [['id', 'expense_number', 'supplier_invoice_number', 'supplier', 'supplier_ico', 'supplier_dic', 'status', 'issue_date', 'tax_point_date', 'due_date', 'currency', 'tax_base', 'vat_rate', 'vat', 'total', 'exchange_rate', 'total_czk', 'paid_at', 'description', 'notes', 'attachment']];
   const vatCsv: unknown[][] = [['invoice_id', 'invoice_number', 'currency', 'vat_treatment', 'vat_rate', 'tax_base', 'vat', 'exchange_rate']];
+  const dphDocuments: DphDocument[] = [];
   for (const { id } of invoices.rows) {
     const document = await loadInvoiceDocument(id, userId);
     const { invoice: i, items } = document;
@@ -70,7 +72,17 @@ export async function generateAccountantExport(userId: string, period: ReturnTyp
       i.paid_at ? documentDate(i.paid_at) : '', `${stem}.pdf`, `${stem}.isdoc`]);
     items.forEach((line, index) => lineCsv.push([id, i.invoice_number, index + 1, line.description, line.quantity, line.unit,
       line.unitPrice, i.currency, line.total, line.vatRate, line.vatTreatment, line.vatReason, line.vatCode, line.vatAmount, roundMoney(line.total + line.vatAmount)]));
-    summarizeStoredTax(items, Number(i.vat_rate)).forEach(g => vatCsv.push([id, i.invoice_number, i.currency, g.vatTreatment, g.vatRate, g.base, g.vatAmount, i.exchange_rate == null ? '' : Number(i.exchange_rate)]));
+    const taxGroups = summarizeStoredTax(items, Number(i.vat_rate));
+    taxGroups.forEach(g => vatCsv.push([id, i.invoice_number, i.currency, g.vatTreatment, g.vatRate, g.base, g.vatAmount, i.exchange_rate == null ? '' : Number(i.exchange_rate)]));
+    dphDocuments.push({ direction: 'issued', id, number: i.invoice_number, counterparty: i.client_name, dic: i.client_dic, status: i.status,
+      issueDate: i.issue_date, taxDate: i.delivery_date, currency: i.currency, exchangeRate: i.exchange_rate == null ? null : Number(i.exchange_rate),
+      total: Number(i.total), totalCzk: i.total_czk == null ? null : Number(i.total_czk), source: `${stem}.pdf`,
+      groups: taxGroups.map(group => {
+        const lines = items.filter(line => line.vatRate === group.vatRate && line.vatTreatment === group.vatTreatment);
+        return { rate: group.vatRate, treatment: group.vatTreatment, lines: lines.map(line => ({ base: line.total, vat: line.vatAmount })),
+          reasons: [...new Set(lines.map(line => line.vatReason).filter(Boolean))].join(' | '),
+          codes: [...new Set(lines.map(line => line.vatCode).filter(Boolean))].join(' | ') };
+      }) });
   }
   for (const e of expenses.rows) {
     let attachment = '';
@@ -85,14 +97,25 @@ export async function generateAccountantExport(userId: string, period: ReturnTyp
       Number(e.amount), Number(e.vat_rate), Number(e.vat_amount), Number(e.total), e.exchange_rate == null ? '' : Number(e.exchange_rate),
       e.currency === 'CZK' ? Number(e.total) : e.total_czk == null ? '' : Number(e.total_czk),
       e.paid_at ? documentDate(e.paid_at) : '', e.description, e.notes, attachment]);
+    dphDocuments.push({ direction: 'received', id: e.id, number: e.expense_number, reference: e.supplier_invoice_number,
+      counterparty: e.supplier_name, dic: e.supplier_dic, status: e.status, issueDate: e.issue_date, taxDate: e.delivery_date,
+      currency: e.currency, exchangeRate: e.exchange_rate == null ? null : Number(e.exchange_rate), total: Number(e.total),
+      totalCzk: e.total_czk == null ? null : Number(e.total_czk), source: attachment,
+      groups: [{ rate: Number(e.vat_rate), treatment: 'unclassified', lines: [{ base: Number(e.amount), vat: Number(e.vat_amount) }] }] });
   }
   add('issued-invoices.csv', csv(invoiceCsv));
   add('issued-lines.csv', csv(lineCsv));
   add('issued-vat.csv', csv(vatCsv));
   add('received-expenses.csv', csv(expenseCsv));
-  add('manifest.json', Buffer.from(JSON.stringify({ formatVersion: 1, generatedAt: new Date().toISOString(), ...period,
+  const dph = buildDphPreparation(dphDocuments, period);
+  add('dph/summary.csv', csv(dph.summary));
+  add('dph/register.csv', csv(dph.register));
+  add('dph/issues.csv', csv(dph.issues));
+  add('dph/README.txt', Buffer.from(dphReadme(period), 'utf8'));
+  add('manifest.json', Buffer.from(JSON.stringify({ formatVersion: 2, generatedAt: new Date().toISOString(), ...period,
     issuedInvoices: invoices.rows.length, receivedExpenses: expenses.rows.length,
+    dphPreparation: { issueCount: dph.issueCount, excludedGroupCount: dph.excludedGroupCount, inputVatDeductibility: 'unreviewed', filingXml: false },
     includedInvoiceStatuses: ['sent', 'paid', 'overdue'], files: Object.keys(files) }, null, 2)));
-  add('README.txt', Buffer.from(`Essential Invoice - účetní podklady / accountant package\nPeriod: ${from} - ${to} (inclusive)\nDate basis: ${basis === 'tax' ? 'delivery_date, falling back to issue_date' : 'issue_date'}\n\nCSV: UTF-8 with BOM, semicolon delimiter, quoted cells, decimal point.\nText starting with spreadsheet formula characters is prefixed with an apostrophe.\nAmounts are in the document currency. Missing EUR conversions are empty, never treated as CZK.\nissued-vat.csv contains issued invoice VAT bases and taxes by rate/treatment, not a tax return.\nExpense VAT remains at document level; no input-VAT deductibility is inferred.\nDraft/cancelled invoices and recurring templates are excluded. Paid and unpaid expenses are included.\nPDF and ISDOC parties use current company/client details. Free-form addresses are preserved without guessing structured address fields.\nISDOC is unsigned version 6.0.2, for ordinary invoices, including domestic reverse charge.\nThis package contains no VAT return or control-statement XML.\n`));
+  add('README.txt', Buffer.from(`Essential Invoice - účetní podklady / accountant package\nPeriod: ${from} - ${to} (inclusive)\nDate basis: ${basis === 'tax' ? 'delivery_date, falling back to issue_date' : 'issue_date'}\n\nCSV: UTF-8 with BOM, semicolon delimiter, quoted cells, decimal point.\nText starting with spreadsheet formula characters is prefixed with an apostrophe.\nThe issued-* and received-expenses CSV amounts are in the document currency. Missing EUR conversions are empty, never treated as CZK.\nissued-vat.csv contains issued invoice VAT bases and taxes by rate/treatment, not a tax return.\nExpense VAT remains at document level; no input-VAT deductibility is inferred.\nDPH preparation: dph/summary.csv, dph/register.csv, dph/issues.csv and bilingual dph/README.txt.\nReceived VAT is recorded VAT only, not a confirmed deduction. No VAT payable is calculated.\nThe DPH pack uses this same selection and stored EUR/CZK rates; review incomplete totals and all flagged items.\nDraft/cancelled invoices and recurring templates are excluded. Paid and unpaid expenses are included.\nPDF and ISDOC parties use current company/client details. Free-form addresses are preserved without guessing structured address fields.\nISDOC is unsigned version 6.0.2, for ordinary invoices, including domestic reverse charge.\nThis package contains no VAT return or control-statement XML.\n`));
   return Buffer.from(zipSync(files, { level: 1 }));
 }

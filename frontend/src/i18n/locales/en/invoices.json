@@ -342,6 +342,11 @@
   },
   "export": {
     "title": "Accountant export",
+    "dphTitle": "DPH preparation pack included",
+    "dphDescription": "CZK VAT summaries, a document register and a completeness report for your accountant.",
+    "dphScope": "Received VAT is recorded VAT only, not a confirmed deduction. The pack does not calculate VAT payable or generate tax-filing XML.",
+    "dphIssueDateHint": "For DPH preparation, consider selecting by tax-point date. Issue-date selection may not match the VAT period.",
+    "dphTaxDateHint": "Tax-point dates determine document selection. Your accountant still needs to confirm the period for claiming expense VAT.",
     "description": "Download a ZIP with invoice PDFs, ISDOC files, CSV summaries, and expense attachments.",
     "from": "From",
     "to": "To",
