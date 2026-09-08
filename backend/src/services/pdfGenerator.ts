@@ -66,6 +66,7 @@ interface InvoiceData {
   userBankAccount: string;
   userBankCode: string;
   userLogoDataUrl: string | null;
+  userCompanyRegisterInfo?: string | null;
   // Language
   language: string;
   // Items
@@ -436,6 +437,9 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
 
   content.push(footerLine);
   content.push(footerText);
+  if (invoice.userCompanyRegisterInfo?.trim()) {
+    content.push({ text: invoice.userCompanyRegisterInfo.trim(), fontSize: 8, color: '#666', alignment: 'center', margin: [0, 4, 0, 0] });
+  }
 
   return {
     pageSize: 'A4',
@@ -459,6 +463,9 @@ function buildDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): T
 function buildMinimalisticDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl: string): TDocumentDefinitions {
   const tr = t(invoice.language).pdf;
   const lang = invoice.language;
+  const registerInfo = invoice.userCompanyRegisterInfo?.replace(/\s+/g, ' ').trim();
+  // Reserve enough space for long registration text, including wide glyphs.
+  const footerMargin = registerInfo ? Math.max(70, 30 + Math.ceil(registerInfo.length / 30) * 11) : 70;
 
   // Short gray section marker
   const sectionDash = (): Content => ({
@@ -752,10 +759,10 @@ function buildMinimalisticDocumentDefinition(invoice: InvoiceData, qrCodeDataUrl
 
   return {
     pageSize: 'A4',
-    pageMargins: [40, 40, 40, 70],
+    pageMargins: [40, 40, 40, footerMargin],
     content,
     footer: {
-      text: `${tr.issuedOn} ${formatDate(new Date(), lang)} | ${tr.invoice} ${tr.invoiceNumberShort} ${invoice.invoiceNumber}`,
+      text: registerInfo || `${tr.issuedOn} ${formatDate(new Date(), lang)} | ${tr.invoice} ${tr.invoiceNumberShort} ${invoice.invoiceNumber}`,
       fontSize: 8, color: LABEL_GRAY, margin: [40, 20, 40, 0],
     },
     defaultStyle: {
@@ -781,6 +788,7 @@ export async function generateInvoicePDF(invoiceId: string, userId: string): Pro
       u.name as user_name, u.company_name as user_company_name,
       u.company_address as user_address, u.company_ico as user_ico,
       u.company_dic as user_dic, u.vat_payer as user_vat_payer,
+      u.company_register_info as user_company_register_info,
       u.bank_account as user_bank_account,
       u.bank_code as user_bank_code, u.language as user_language,
       u.logo_data as user_logo_data, u.logo_mime_type as user_logo_mime_type,
@@ -838,6 +846,7 @@ export async function generateInvoicePDF(invoiceId: string, userId: string): Pro
     userBankCode: row.user_bank_code,
     language: row.user_language || 'cs',
     userLogoDataUrl,
+    userCompanyRegisterInfo: row.user_company_register_info,
     items: itemsResult.rows.map(item => ({
       description: item.description,
       quantity: parseFloat(item.quantity),

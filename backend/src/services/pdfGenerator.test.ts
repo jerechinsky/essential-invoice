@@ -223,3 +223,27 @@ describe('minimalistic PDF content', () => {
     expect(text).not.toContain('QR-DATA');
   });
 });
+
+describe('supplier registration on PDF invoices', () => {
+  it.each(['buildClassicDocumentDefinition', 'buildMinimalisticDocumentDefinition'] as const)('includes registry text in %s', async builder => {
+    const { __test__ } = await import('./pdfGenerator');
+    const text = 'Zapsáno v obchodním rejstříku vedeném Městským soudem v Praze, oddíl C, vložka 123456.';
+    const doc = __test__[builder](makeDefinitionInvoice({ userCompanyRegisterInfo: text }), '');
+    expect(JSON.stringify([doc.content, doc.footer])).toContain(text);
+  });
+
+  it('reserves footer space and normalizes whitespace for long registry entries', async () => {
+    const { __test__ } = await import('./pdfGenerator');
+    const text = 'Zapsáno v rejstříku.\n'.repeat(20).trim();
+    const doc = __test__.buildMinimalisticDocumentDefinition(makeDefinitionInvoice({ userCompanyRegisterInfo: text }), '');
+    expect((doc.pageMargins as number[])[3]).toBeGreaterThan(70);
+    expect((doc.footer as any).text).toBe(text.replace(/\s+/g, ' '));
+  });
+
+  it.each([undefined, null, '', '   '])('keeps the generated-on footer when registration is absent: %j', async userCompanyRegisterInfo => {
+    const { __test__ } = await import('./pdfGenerator');
+    const doc = __test__.buildMinimalisticDocumentDefinition(makeDefinitionInvoice({ userCompanyRegisterInfo }), '');
+    expect((doc.footer as any).text).toContain('Vystaveno dne');
+    expect(doc.pageMargins).toEqual([40, 40, 40, 70]);
+  });
+});

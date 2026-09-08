@@ -37,6 +37,7 @@ export default function Profile() {
     companyIco: user?.companyIco || '',
     companyDic: user?.companyDic || '',
     companyAddress: user?.companyAddress || '',
+    companyRegisterInfo: user?.companyRegisterInfo || '',
     bankAccount: user?.bankAccount || '',
     bankCode: user?.bankCode || '',
     language: user?.language || 'cs',
@@ -453,6 +454,22 @@ export default function Profile() {
             className="input"
             rows={2}
           />
+        </div>
+
+        <div>
+          <label htmlFor="companyRegisterInfo" className="label">{t('company.registerInfo')}</label>
+          <textarea
+            id="companyRegisterInfo"
+            name="companyRegisterInfo"
+            value={formData.companyRegisterInfo}
+            onChange={handleChange}
+            className="input"
+            rows={3}
+            maxLength={500}
+            placeholder={t('company.registerInfoPlaceholder')}
+            aria-describedby="companyRegisterInfoHelp"
+          />
+          <p id="companyRegisterInfoHelp" className="text-xs text-text-muted mt-1">{t('company.registerInfoHelp')}</p>
         </div>
 
         </>)}

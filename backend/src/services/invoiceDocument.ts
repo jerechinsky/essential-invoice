@@ -24,7 +24,7 @@ export async function loadInvoiceDocument(invoiceId: string, userId: string) {
   const result = await query(`SELECT i.*,
     c.company_name AS client_name, c.address AS client_address, c.ico AS client_ico, c.dic AS client_dic,
     u.name AS user_name, u.company_name AS user_company_name, u.company_address AS user_address,
-    u.company_ico AS user_ico, u.company_dic AS user_dic, u.vat_payer AS user_vat_payer,
+    u.company_ico AS user_ico, u.company_dic AS user_dic, u.company_register_info AS user_company_register_info, u.vat_payer AS user_vat_payer,
     u.bank_account AS user_bank_account, u.bank_code AS user_bank_code
     FROM invoices i JOIN clients c ON c.id = i.client_id AND c.user_id = i.user_id JOIN users u ON u.id = i.user_id
     WHERE i.id = $1 AND i.user_id = $2`, [invoiceId, userId]);

@@ -22,6 +22,16 @@ describe('ISDOC 6.0.2', () => {
     } else expect(xml).not.toContain('AmountCurr>');
   });
 
+
+  it('includes XML-safe supplier registration and validates it against the official schema', () => {
+    const doc = mixedInvoice();
+    Object.assign(doc.invoice, { user_company_register_info: 'Zápis <s.r.o.> & soud, oddíl C, vložka 123456' });
+    const xml = buildISDOC(doc);
+    expect(xml).toContain('<RegisterIdentification><Preformatted>Zápis &lt;s.r.o.&gt; &amp; soud, oddíl C, vložka 123456</Preformatted></RegisterIdentification>');
+    expect(xml.split('<RegisterIdentification>')).toHaveLength(2);
+    execFileSync('xmllint', ['--noout', '--nonet', '--schema', schema, '-'], { input: xml, stdio: ['pipe', 'pipe', 'pipe'] });
+  });
+
   it('exports non-VAT payers without contradictory taxable lines', () => {
     const doc = mixedInvoice();
     doc.items = [{ ...doc.items[0], quantity: 1, unitPrice: 100, total: 100, vatRate: 0, vatAmount: 0 }];

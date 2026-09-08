@@ -15,6 +15,9 @@
   },
 
   "company": {
+    "registerInfo": "Register or other business registration",
+    "registerInfoPlaceholder": "E.g. Registered in the Commercial Register maintained by the Municipal Court in Prague, Section C, File 123456.",
+    "registerInfoHelp": "Enter your register or other business registration. For the Commercial Register, include the court, section and file number; sole traders can enter their Trade Register details. Printed on invoices in both templates (Section 435 of the Czech Civil Code).",
     "heading": "Company Details",
     "description": "This information will appear on your invoices.",
     "companyName": "Company name",

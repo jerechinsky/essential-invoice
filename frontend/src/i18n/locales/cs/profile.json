@@ -15,6 +15,9 @@
   },
 
   "company": {
+    "registerInfo": "Zápis v rejstříku nebo jiné evidenci",
+    "registerInfoPlaceholder": "Např. Společnost zapsaná v obchodním rejstříku vedeném Městským soudem v Praze, oddíl C, vložka 123456.",
+    "registerInfoHelp": "Uveďte svůj rejstřík nebo jinou evidenci. U obchodního rejstříku doplňte soud, oddíl a vložku; u OSVČ např. zápis v živnostenském rejstříku. Text se tiskne na faktury v obou šablonách (§ 435 občanského zákoníku).",
     "heading": "Firemní údaje",
     "description": "Tyto údaje se budou zobrazovat na vašich fakturách.",
     "companyName": "Název firmy",

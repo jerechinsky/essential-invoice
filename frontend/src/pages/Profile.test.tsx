@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Profile from './Profile';
 
@@ -9,7 +9,7 @@ const mockLogout = vi.fn();
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: '1', name: 'Test', email: 'test@test.com', vatPayer: undefined, pausalniDanEnabled: false },
+    user: { id: '1', name: 'Test', email: 'test@test.com', vatPayer: undefined, pausalniDanEnabled: false, companyRegisterInfo: 'Zapsáno v živnostenském rejstříku' },
     token: 'test-token',
     updateProfile: mockUpdateProfile,
     refreshUser: mockRefreshUser,
@@ -46,6 +46,34 @@ function renderAt(path: string) {
 describe('Profile Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+
+  it('loads the registration field and explains both types of registration', () => {
+    renderAt('/profile/company');
+    const field = screen.getByRole('textbox', { name: 'Zápis v rejstříku nebo jiné evidenci' });
+    expect(field).toHaveValue('Zapsáno v živnostenském rejstříku');
+    expect(field).toHaveAttribute('maxLength', '500');
+    expect(field).toHaveAccessibleDescription(/oddíl a vložku.*živnostenském rejstříku/);
+    expect(screen.queryByRole('button', { name: /uložit změny/i })).not.toBeInTheDocument();
+  });
+
+  it.each(['Nový zápis, oddíl C, vložka 123456', ''])('saves or clears registration details: %j', async value => {
+    mockUpdateProfile.mockResolvedValueOnce({});
+    renderAt('/profile/company');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Zápis v rejstříku nebo jiné evidenci' }), { target: { value } });
+    fireEvent.click(screen.getByRole('button', { name: /uložit změny/i }));
+    await waitFor(() => expect(mockUpdateProfile).toHaveBeenCalledWith(expect.objectContaining({ companyRegisterInfo: value })));
+    await waitFor(() => expect(screen.queryByRole('button', { name: /uložit změny/i })).not.toBeInTheDocument());
+  });
+
+  it('discards an unsaved change to registration details', () => {
+    renderAt('/profile/company');
+    const field = screen.getByRole('textbox', { name: 'Zápis v rejstříku nebo jiné evidenci' });
+    fireEvent.change(field, { target: { value: 'Changed' } });
+    fireEvent.click(screen.getByRole('button', { name: /zahodit/i }));
+    expect(field).toHaveValue('Zapsáno v živnostenském rejstříku');
+    expect(mockUpdateProfile).not.toHaveBeenCalled();
   });
 
   it('renders paušální daň section with "Používám paušální daň" checkbox', () => {

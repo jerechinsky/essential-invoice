@@ -230,6 +230,16 @@ describe('Auth Routes', () => {
   });
 
   describe('GET /auth/me', () => {
+    it('returns the supplier registration details', async () => {
+      const token = jwt.sign({ userId: 'registry-user', email: 'test@example.com' }, 'test-secret-at-least-16-chars');
+      mockedQuery.mockResolvedValueOnce({ rows: [{ id: 'registry-user', company_register_info: 'Zapsáno v živnostenském rejstříku' }] } as any);
+      const response = await request(app).get('/auth/me').set('Authorization', `Bearer ${token}`);
+      expect(response.status).toBe(200);
+      expect(response.body.companyRegisterInfo).toBe('Zapsáno v živnostenském rejstříku');
+      expect(mockedQuery.mock.calls[0][0]).toContain('company_register_info');
+      expect(mockedQuery.mock.calls[0][1]).toEqual(['registry-user']);
+    });
+
     it('should return 401 if no token provided', async () => {
       const response = await request(app).get('/auth/me');
 
@@ -378,6 +388,35 @@ describe('Auth Routes', () => {
   });
 
   describe('PUT /auth/me', () => {
+    it.each(['Zapsáno v živnostenském rejstříku', '', '  Zapsáno v obchodním rejstříku  '])('saves and returns registration details: %j', async companyRegisterInfo => {
+      const token = jwt.sign({ userId: 'registry-user', email: 'test@example.com' }, 'test-secret-at-least-16-chars');
+      mockedQuery.mockResolvedValueOnce({ rows: [{ id: 'registry-user', company_register_info: companyRegisterInfo.trim() }] } as any);
+      const response = await request(app).put('/auth/me').set('Authorization', `Bearer ${token}`).send({ companyRegisterInfo });
+      expect(response.status).toBe(200);
+      expect(response.body.companyRegisterInfo).toBe(companyRegisterInfo.trim());
+      const [sql, values] = mockedQuery.mock.calls[0];
+      expect(sql).toContain('company_register_info = COALESCE($15, company_register_info)');
+      expect(sql).toContain('WHERE id = $14');
+      expect(values?.slice(13)).toEqual(['registry-user', companyRegisterInfo.trim()]);
+    });
+
+    it('preserves registration details when another profile section omits the field', async () => {
+      const token = jwt.sign({ userId: 'registry-user', email: 'test@example.com' }, 'test-secret-at-least-16-chars');
+      mockedQuery.mockResolvedValueOnce({ rows: [{ id: 'registry-user', company_register_info: 'Existing registry details' }] } as any);
+      const response = await request(app).put('/auth/me').set('Authorization', `Bearer ${token}`).send({ language: 'en' });
+      expect(response.status).toBe(200);
+      expect(response.body.companyRegisterInfo).toBe('Existing registry details');
+      expect(mockedQuery.mock.calls[0][0]).toContain('company_register_info = COALESCE($15, company_register_info)');
+      expect(mockedQuery.mock.calls[0][1]?.[14]).toBeUndefined();
+    });
+
+    it.each([null, 12, {}, ['registry'], 'x'.repeat(501)])('rejects invalid registration details: %j', async companyRegisterInfo => {
+      const token = jwt.sign({ userId: 'registry-user', email: 'test@example.com' }, 'test-secret-at-least-16-chars');
+      const response = await request(app).put('/auth/me').set('Authorization', `Bearer ${token}`).send({ companyRegisterInfo });
+      expect(response.status).toBe(400);
+      expect(mockedQuery).not.toHaveBeenCalled();
+    });
+
     it('should update user profile', async () => {
       const userId = 'test-user-id';
       const token = jwt.sign({ userId, email: 'test@example.com' }, 'test-secret-at-least-16-chars');

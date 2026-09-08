@@ -18,6 +18,8 @@ Requests share a limit of **1,000 requests per IP per 15 minutes**, except `/api
 - `POST /api/auth/me/logo` - Upload user logo (multipart form data)
 - `DELETE /api/auth/me/logo` - Delete user logo
 
+`GET /api/auth/me` returns `companyRegisterInfo`. `PUT /api/auth/me` accepts this plain-text field (up to 500 characters): omitting it preserves the saved value; an empty string clears it. The configured text appears in both invoice PDF themes and in ISDOC supplier `RegisterIdentification/Preformatted`.
+
 ## Clients
 
 - `GET /api/clients` - List all clients (each row also carries `invoiceCount`, `totalPaid`, `totalInvoiced` and `openBalance`, the latter two normalised to CZK for the contacts ranking)

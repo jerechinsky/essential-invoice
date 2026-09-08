@@ -10,6 +10,7 @@ interface User {
   companyIco?: string;
   companyDic?: string;
   companyAddress?: string;
+  companyRegisterInfo?: string;
   bankAccount?: string;
   bankCode?: string;
   vatPayer?: boolean;

@@ -11,12 +11,12 @@ const money = (name: string, value: number) => element(name, roundMoney(value).t
 
 // The app stores a free-form address. Preserve it in StreetName and leave
 // unavailable structured fields empty instead of inventing a city/country.
-function party(name: string, address: string, ico: string, dic: string) {
+function party(name: string, address: string, ico: string, dic: string, registerInfo?: string) {
   return `<Party><PartyIdentification>${element('ID', ico)}</PartyIdentification>
     <PartyName>${element('Name', name)}</PartyName><PostalAddress>
     ${element('StreetName', address)}<BuildingNumber/><CityName/><PostalZone/>
     <Country><IdentificationCode/><Name/></Country></PostalAddress>
-    ${dic ? `<PartyTaxScheme>${element('CompanyID', dic)}<TaxScheme>VAT</TaxScheme></PartyTaxScheme>` : ''}</Party>`;
+    ${dic ? `<PartyTaxScheme>${element('CompanyID', dic)}<TaxScheme>VAT</TaxScheme></PartyTaxScheme>` : ''}${registerInfo?.trim() ? `<RegisterIdentification>${element('Preformatted', registerInfo.trim())}</RegisterIdentification>` : ''}</Party>`;
 }
 
 export function buildISDOC({ invoice: row, items }: Awaited<ReturnType<typeof loadInvoiceDocument>>): string {
@@ -89,7 +89,7 @@ export function buildISDOC({ invoice: row, items }: Awaited<ReturnType<typeof lo
   <ElectronicPossibilityAgreementReference/>${row.notes ? element('Note', row.notes) : ''}
   <LocalCurrencyCode>CZK</LocalCurrencyCode>${foreign ? '<ForeignCurrencyCode>EUR</ForeignCurrencyCode>' : ''}
   ${element('CurrRate', rate)}<RefCurrRate>1</RefCurrRate>
-  <AccountingSupplierParty>${party(row.user_company_name || row.user_name, row.user_address, row.user_ico, row.user_dic)}</AccountingSupplierParty>
+  <AccountingSupplierParty>${party(row.user_company_name || row.user_name, row.user_address, row.user_ico, row.user_dic, row.user_company_register_info)}</AccountingSupplierParty>
   <AccountingCustomerParty>${party(row.client_name, row.client_address, row.client_ico, row.client_dic)}</AccountingCustomerParty>
   <InvoiceLines>${lines}</InvoiceLines><TaxTotal>${taxGroups}${foreign ? money('TaxAmountCurr', tax) : ''}${money('TaxAmount', localTax)}</TaxTotal>
   <LegalMonetaryTotal>${pair('TaxExclusiveAmount', subtotal, localBase)}${pair('TaxInclusiveAmount', total, localTotal)}

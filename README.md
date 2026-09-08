@@ -8,6 +8,7 @@ A lightweight, self-hosted invoicing web application designed for Czech freelanc
 
 ## Features
 
+- **Business registration** - Configure register or other registration details in Profile → Company details and print them on invoices in either PDF theme.
 - **PDF themes** - Choose the classic or monochrome minimalistic invoice template in Settings → Invoice defaults.
 - **AI Features**: Personalized Czech tax advisor with live web search, expense extraction from uploaded receipts/invoices, and AI-drafted payment reminders (via OpenRouter or any OpenAI-compatible API)
 - **Invoice Management**: Create, edit, duplicate, and send invoices with automatic numbering
