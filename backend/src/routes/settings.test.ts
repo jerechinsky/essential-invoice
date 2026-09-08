@@ -35,6 +35,28 @@ describe('Settings Routes', () => {
   });
 
   describe('PUT /settings', () => {
+    it.each(['classic', 'minimalistic'])('saves the %s PDF theme for the authenticated user', async (invoicePdfTemplate) => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: '1' }] });
+      const response = await request(app).put('/settings').send({ invoicePdfTemplate });
+      expect(response.status).toBe(200);
+      const [sql, values] = mockQuery.mock.calls[0];
+      expect(sql).toContain('invoice_pdf_template = $1');
+      expect(sql).toContain('WHERE user_id = $2');
+      expect(values).toEqual([invoicePdfTemplate, 'test-user-id']);
+    });
+
+    it.each(['unknown', '', null, 1, {}, ['classic']])('rejects an invalid PDF theme: %j', async (invoicePdfTemplate) => {
+      const response = await request(app).put('/settings').send({ invoicePdfTemplate });
+      expect(response.status).toBe(400);
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
+    it('preserves the saved PDF theme when updating another setting', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: '1' }] });
+      expect((await request(app).put('/settings').send({ defaultPaymentTerms: 30 })).status).toBe(200);
+      expect(mockQuery.mock.calls[0][0]).not.toContain('invoice_pdf_template');
+    });
+
     it('should update defaultVatRate to 0', async () => {
       // Mock successful update
       mockQuery.mockResolvedValueOnce({
@@ -131,6 +153,20 @@ describe('Settings Routes', () => {
   });
 
   describe('GET /settings', () => {
+    it.each(['classic', 'minimalistic', null, undefined])('returns the saved theme or classic fallback: %s', async (stored) => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ invoice_pdf_template: stored, default_vat_rate: '21' }] });
+      const response = await request(app).get('/settings');
+      expect(response.status).toBe(200);
+      expect(response.body.invoicePdfTemplate).toBe(stored === 'minimalistic' ? 'minimalistic' : 'classic');
+    });
+
+    it('uses classic for newly created settings', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] });
+      const response = await request(app).get('/settings');
+      expect(response.status).toBe(200);
+      expect(response.body.invoicePdfTemplate).toBe('classic');
+    });
+
     it('should return defaultVatRate: 0 when stored as 0', async () => {
       mockQuery.mockResolvedValueOnce({
         rows: [{

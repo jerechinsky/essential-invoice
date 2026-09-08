@@ -52,6 +52,9 @@
     "modelHelp": "Leave empty to use openai/gpt-5.6-luna. On OpenRouter, the tax advisor automatically adds web search."
   },
   "invoiceDefaults": {
+    "pdfTemplate": "Invoice PDF template",
+    "pdfTemplateClassic": "Classic",
+    "pdfTemplateMinimalistic": "Minimalistic",
     "heading": "Invoice Defaults",
     "vatRate": "Default VAT rate (%)",
     "paymentTerms": "Default payment terms (days)",

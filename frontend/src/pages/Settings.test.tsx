@@ -92,6 +92,38 @@ describe('Settings Component', () => {
     vi.clearAllMocks();
   });
 
+
+  it.each([undefined, 'classic', 'minimalistic'])('loads the PDF theme without making the form dirty: %s', async (invoicePdfTemplate) => {
+    mockGet.mockResolvedValueOnce({ ...defaultSettings, invoicePdfTemplate });
+    renderAt('/settings/invoicing');
+    const select = await screen.findByRole('combobox', { name: 'Šablona PDF faktury' });
+    expect(select).toHaveValue(invoicePdfTemplate || 'classic');
+    expect(screen.queryByRole('button', { name: /uložit nastavení/i })).not.toBeInTheDocument();
+  });
+
+  it.each([['classic', 'minimalistic'], ['minimalistic', 'classic']])('saves a theme change from %s to %s and reloads it', async (from, to) => {
+    mockGet.mockResolvedValueOnce({ ...defaultSettings, invoicePdfTemplate: from });
+    mockPut.mockResolvedValueOnce({});
+    mockGet.mockResolvedValueOnce({ ...defaultSettings, invoicePdfTemplate: to });
+    renderAt('/settings/invoicing');
+    const select = await screen.findByRole('combobox', { name: 'Šablona PDF faktury' });
+    fireEvent.change(select, { target: { value: to } });
+    fireEvent.click(screen.getByRole('button', { name: /uložit nastavení/i }));
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/settings', expect.objectContaining({ invoicePdfTemplate: to })));
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    expect(select).toHaveValue(to);
+    await waitFor(() => expect(screen.queryByRole('button', { name: /uložit nastavení/i })).not.toBeInTheDocument());
+  });
+
+  it('discards an unsaved PDF theme change', async () => {
+    mockGet.mockResolvedValueOnce({ ...defaultSettings, invoicePdfTemplate: 'minimalistic' });
+    renderAt('/settings/invoicing');
+    const select = await screen.findByRole('combobox', { name: 'Šablona PDF faktury' });
+    fireEvent.change(select, { target: { value: 'classic' } });
+    fireEvent.click(screen.getByRole('button', { name: /zahodit/i }));
+    expect(select).toHaveValue('minimalistic');
+    expect(mockPut).not.toHaveBeenCalled();
+  });
   it('should load and display defaultVatRate: 0 correctly', async () => {
     mockGet.mockResolvedValueOnce({ ...defaultSettings, defaultVatRate: 0 });
 

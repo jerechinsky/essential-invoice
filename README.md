@@ -8,6 +8,7 @@ A lightweight, self-hosted invoicing web application designed for Czech freelanc
 
 ## Features
 
+- **PDF themes** - Choose the classic or monochrome minimalistic invoice template in Settings → Invoice defaults.
 - **AI Features**: Personalized Czech tax advisor with live web search, expense extraction from uploaded receipts/invoices, and AI-drafted payment reminders (via OpenRouter or any OpenAI-compatible API)
 - **Invoice Management**: Create, edit, duplicate, and send invoices with automatic numbering
 - **Per-line VAT**: Mixed VAT rates, exemption reasons and domestic reverse charge, with consistent totals in invoices, recurring templates and PDFs

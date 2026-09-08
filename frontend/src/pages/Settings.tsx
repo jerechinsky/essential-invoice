@@ -32,6 +32,7 @@ interface Settings {
   emailPollingInterval: number;
   invoiceNumberPrefix: string;
   invoiceNumberFormat: string;
+  invoicePdfTemplate: 'classic' | 'minimalistic';
   defaultVatRate: number;
   defaultPaymentTerms: number;
   emailTemplate: string | null;
@@ -72,6 +73,7 @@ const EMPTY_FORM = {
   bankNotificationEmail: '',
   emailPollingInterval: 300,
   invoiceNumberPrefix: '',
+  invoicePdfTemplate: 'classic' as 'classic' | 'minimalistic',
   defaultVatRate: 21,
   defaultPaymentTerms: 14,
   emailTemplate: '',
@@ -101,6 +103,7 @@ function toFormState(result: Settings): FormState {
     bankNotificationEmail: result.bankNotificationEmail || '',
     emailPollingInterval: result.emailPollingInterval ?? 300,
     invoiceNumberPrefix: result.invoiceNumberPrefix || '',
+    invoicePdfTemplate: result.invoicePdfTemplate === 'minimalistic' ? 'minimalistic' : 'classic',
     defaultVatRate: result.defaultVatRate ?? 21,
     defaultPaymentTerms: result.defaultPaymentTerms ?? 14,
     emailTemplate: result.emailTemplate || '',
@@ -468,6 +471,19 @@ export default function Settings() {
                       min={1}
                     />
                     <p className="text-xs text-text-faint mt-1">{t('invoiceDefaults.paymentTermsHelp')}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label htmlFor="invoicePdfTemplate" className="label">{t('invoiceDefaults.pdfTemplate')}</label>
+                    <select
+                      id="invoicePdfTemplate"
+                      name="invoicePdfTemplate"
+                      value={formData.invoicePdfTemplate}
+                      onChange={handleChange}
+                      className="input"
+                    >
+                      <option value="classic">{t('invoiceDefaults.pdfTemplateClassic')}</option>
+                      <option value="minimalistic">{t('invoiceDefaults.pdfTemplateMinimalistic')}</option>
+                    </select>
                   </div>
                   <div className="md:col-span-2">
                     <label className="label">{t('invoiceDefaults.invoiceNumberPrefix')}</label>

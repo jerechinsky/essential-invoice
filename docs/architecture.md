@@ -8,7 +8,7 @@ Essential Invoice is a self-hosted invoicing application for Czech freelancers w
 - **Entry point**: `index.ts` - Express app setup, middleware, route mounting
 - **Routes**: `routes/` - REST endpoints for auth (register, login, forgot-password, reset-password, delete account), clients, invoices, recurring invoices, expenses, payments, settings, ARES lookup, dashboard, AI
 - **Services**: `services/` - Business logic:
-  - `pdfGenerator.ts` - Invoice PDF generation using **pdfmake** library with Czech formatting, QR payment codes (SPAYD), and VAT/non-VAT payer support, per-line tax treatments, tax-point dates and grouped VAT breakdowns
+  - `pdfGenerator.ts` - Invoice PDFs using **pdfmake**, with classic (default, Roboto) and minimalistic (IBM Plex Sans) themes selected by `settings.invoice_pdf_template`. Both support Czech/English labels, QR payments (SPAYD), VAT/non-VAT payers, per-line tax treatments, tax-point dates and grouped VAT breakdowns.
   - `emailSender.ts` - Per-user SMTP email sending for invoice delivery
   - `globalEmailSender.ts` - Global SMTP email sending for system emails (welcome, password reset), configured via env vars
   - `emailPoller.ts` - IMAP polling for bank payment notifications

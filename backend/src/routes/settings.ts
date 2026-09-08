@@ -31,6 +31,7 @@ settingsRouter.get('/', async (req: AuthRequest, res: Response) => {
         emailPollingInterval: 300,
         invoiceNumberPrefix: '',
         invoiceNumberFormat: 'YYYYMM##',
+        invoicePdfTemplate: 'classic',
         defaultVatRate: 21,
         defaultPaymentTerms: 14,
         emailTemplate: null,
@@ -60,6 +61,7 @@ settingsRouter.get('/', async (req: AuthRequest, res: Response) => {
       emailPollingInterval: settings.email_polling_interval,
       invoiceNumberPrefix: settings.invoice_number_prefix,
       invoiceNumberFormat: settings.invoice_number_format,
+      invoicePdfTemplate: settings.invoice_pdf_template === 'minimalistic' ? 'minimalistic' : 'classic',
       defaultVatRate: parseFloat(settings.default_vat_rate),
       defaultPaymentTerms: settings.default_payment_terms,
       emailTemplate: settings.email_template,
@@ -82,6 +84,7 @@ settingsRouter.put('/', async (req: AuthRequest, res: Response) => {
     imapHost, imapPort, imapUser, imapPassword, imapTls,
     bankNotificationEmail, emailPollingInterval,
     invoiceNumberPrefix, invoiceNumberFormat,
+    invoicePdfTemplate,
     defaultVatRate, defaultPaymentTerms,
     emailTemplate,
     calculatorEnabled,
@@ -92,6 +95,10 @@ settingsRouter.put('/', async (req: AuthRequest, res: Response) => {
   } = req.body;
 
   try {
+    if (invoicePdfTemplate !== undefined && invoicePdfTemplate !== 'classic' && invoicePdfTemplate !== 'minimalistic') {
+      return res.status(400).json({ error: 'Invalid invoice PDF template' });
+    }
+
     // Build update query dynamically to only update provided fields
     const updates: string[] = [];
     const values: any[] = [];
@@ -120,6 +127,7 @@ settingsRouter.put('/', async (req: AuthRequest, res: Response) => {
     addUpdate('email_polling_interval', emailPollingInterval);
     addUpdate('invoice_number_prefix', invoiceNumberPrefix);
     addUpdate('invoice_number_format', invoiceNumberFormat);
+    addUpdate('invoice_pdf_template', invoicePdfTemplate);
     addUpdate('default_vat_rate', defaultVatRate);
     addUpdate('default_payment_terms', defaultPaymentTerms);
     addUpdate('email_template', emailTemplate);

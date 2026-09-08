@@ -3,6 +3,9 @@ export type Locale = 'cs' | 'en';
 interface PdfTranslations {
   invoice: string;
   invoiceNumberShort: string;
+  taxDocument: string;
+  paymentMethod: string;
+  paymentMethodTransfer: string;
   supplier: string;
   customer: string;
   issueDate: string;
@@ -53,6 +56,9 @@ const translations: Record<Locale, Translations> = {
     pdf: {
       invoice: 'FAKTURA',
       invoiceNumberShort: 'č.',
+      taxDocument: 'DAŇOVÝ DOKLAD',
+      paymentMethod: 'Způsob platby',
+      paymentMethodTransfer: 'Převodem',
       supplier: 'DODAVATEL',
       customer: 'ODBĚRATEL',
       issueDate: 'DATUM VYSTAVENÍ',
@@ -130,6 +136,9 @@ S pozdravem,
     pdf: {
       invoice: 'INVOICE',
       invoiceNumberShort: 'No.',
+      taxDocument: 'TAX DOCUMENT',
+      paymentMethod: 'Payment method',
+      paymentMethodTransfer: 'Bank transfer',
       supplier: 'SUPPLIER',
       customer: 'CUSTOMER',
       issueDate: 'ISSUE DATE',

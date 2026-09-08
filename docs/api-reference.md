@@ -132,6 +132,8 @@ Errors: `400` invalid dates/tax data, missing EUR rate or inconsistent invoice t
 - `POST /api/settings/test-smtp` - Test SMTP connection
 - `POST /api/settings/test-imap` - Test IMAP connection
 
+`invoicePdfTemplate` is returned by `GET` and accepted by `PUT`: `classic` (default) or `minimalistic`. Other values return HTTP 400; omitting the field preserves the saved choice. The selection applies to newly generated invoice PDFs, including downloads, email attachments and accountant exports.
+
 ## AI
 
 - `GET /api/ai/status` - Check AI feature availability

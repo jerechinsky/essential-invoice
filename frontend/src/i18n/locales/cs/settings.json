@@ -52,6 +52,9 @@
     "modelHelp": "Ponechte prázdné pro openai/gpt-5.6-luna. Na OpenRouteru daňový poradce automaticky používá vyhledávání na webu."
   },
   "invoiceDefaults": {
+    "pdfTemplate": "Šablona PDF faktury",
+    "pdfTemplateClassic": "Klasická",
+    "pdfTemplateMinimalistic": "Minimalistická",
     "heading": "Výchozí hodnoty faktur",
     "vatRate": "Výchozí sazba DPH (%)",
     "paymentTerms": "Výchozí splatnost (dny)",
